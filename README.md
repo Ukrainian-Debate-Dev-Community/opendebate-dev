@@ -18,6 +18,7 @@ DB_SERVER = Server_name
 DB_USER = Pasha
 DB_PASSWORD = Gay
 DB_DATABASE = DB_name
+NODE_ENV = development
 ```
 
 In the root type
