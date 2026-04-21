@@ -74,9 +74,7 @@ const createTeam = async (req, res, next) => {
       throw new AppError("A team must have exactly two players.", 400);
     }
 
-    if (opener === closer) {
-      throw new AppError("A user cannot be both opener and closer.", 400);
-    }
+    // now the judge can assign the ironman (opener and closer share the same id)
 
     const userIds = [opener, closer].filter((id) => id != null);
 
