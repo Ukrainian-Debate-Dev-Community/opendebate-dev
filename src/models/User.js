@@ -26,18 +26,18 @@ module.exports = (sequelize) => {
   User.associate = (models) => {
     // cascade role deletion (admin, owner, waitlist)
     User.hasOne(models.Admin, { foreignKey: "user_id", onDelete: "CASCADE" });
-    User.belongsToMany(models.Club, {
+    User.belongsToMany(models.Holding, {
       through: models.Owner,
-      as: "OwnedClubs",
+      as: "OwnedHoldings",
       foreignKey: "user_id",
-      otherKey: "club_id",
+      otherKey: "holding_id",
       onDelete: "CASCADE",
     });
-    User.belongsToMany(models.Event, {
+    User.belongsToMany(models.Session, {
       through: models.Waitlist,
-      as: "WaitlistedEvents",
+      as: "WaitlistedSessions",
       foreignKey: "user_id",
-      otherKey: "event_id",
+      otherKey: "session_id",
       onDelete: "CASCADE",
     });
 

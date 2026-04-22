@@ -16,8 +16,9 @@ const sequelize = new Sequelize({
 
 const models = {
   User: require("./User")(sequelize),
-  Club: require("./Club")(sequelize),
-  Event: require("./Event")(sequelize),
+  Holding: require("./Holding")(sequelize),
+  Session: require("./Session")(sequelize),
+  Motion: require("./Motion")(sequelize),
   Room: require("./Room")(sequelize),
   Team: require("./Team")(sequelize),
   Admin: require("./Admin")(sequelize),

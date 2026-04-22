@@ -5,7 +5,7 @@ module.exports = (sequelize) => {
     "Waitlist",
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-      event_id: { type: DataTypes.INTEGER, allowNull: false },
+      session_id: { type: DataTypes.INTEGER, allowNull: false },
       user_id: { type: DataTypes.INTEGER, allowNull: false },
     },
     { tableName: "waitlists" },

@@ -5,7 +5,7 @@ module.exports = (sequelize) => {
     "Team",
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-      event_id: { type: DataTypes.INTEGER, allowNull: false },
+      session_id: { type: DataTypes.INTEGER, allowNull: false },
       opener: { type: DataTypes.INTEGER, allowNull: false },
       closer: { type: DataTypes.INTEGER, allowNull: false },
     },
@@ -13,7 +13,7 @@ module.exports = (sequelize) => {
   );
 
   Team.associate = (models) => {
-    Team.belongsTo(models.Event, { foreignKey: "event_id" });
+    Team.belongsTo(models.Session, { foreignKey: "session_id" });
     Team.belongsTo(models.User, { as: "OpenerData", foreignKey: "opener" });
     Team.belongsTo(models.User, { as: "CloserData", foreignKey: "closer" });
     Team.hasMany(models.RoomTeam, {

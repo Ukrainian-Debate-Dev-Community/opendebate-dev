@@ -5,7 +5,7 @@ module.exports = (sequelize) => {
     "Room",
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-      event_id: { type: DataTypes.INTEGER, allowNull: false },
+      session_id: { type: DataTypes.INTEGER, allowNull: false },
       judge: { type: DataTypes.INTEGER, allowNull: true },
       status: {
         type: DataTypes.STRING(20),
@@ -17,7 +17,7 @@ module.exports = (sequelize) => {
   );
 
   Room.associate = (models) => {
-    Room.belongsTo(models.Event, { foreignKey: "event_id" });
+    Room.belongsTo(models.Session, { foreignKey: "session_id" });
     Room.belongsTo(models.User, { as: "JudgeData", foreignKey: "judge" });
     Room.hasMany(models.RoomTeam, {
       foreignKey: "room_id",
