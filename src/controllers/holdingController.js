@@ -1,13 +1,13 @@
-const { Club, Owner, User } = require("../models/main");
+const { Holding, Owner, User } = require("../models/main");
 const AppError = require("../utils/AppError");
 
-const createClub = async (req, res, next) => {
+const createHolding = async (req, res, next) => {
   try {
     const { name, online, link, owner_id } = req.body;
 
     if (!name || !owner_id) {
       throw new AppError(
-        "Please provide a club name and an initial owner_id.",
+        "Please provide a holding name and an initial owner_id.",
         400,
       );
     }
@@ -21,7 +21,7 @@ const createClub = async (req, res, next) => {
       );
     }
 
-    const newClub = await Club.create({
+    const newHolding = await Holding.create({
       name,
       online: online || false,
       link: link || null,
@@ -30,81 +30,81 @@ const createClub = async (req, res, next) => {
     // link the designated user as the Owner
     await Owner.create({
       user_id: owner_id,
-      club_id: newClub.id,
+      holding_id: newHolding.id,
     });
 
-    res.status(201).json({ status: "success", data: newClub });
+    res.status(201).json({ status: "success", data: newHolding });
   } catch (error) {
     next(error);
   }
 };
 
-const getAllClubs = async (req, res, next) => {
+const getAllHoldings = async (req, res, next) => {
   try {
-    const clubs = await Club.findAll({ where: { status: "active" } });
-    res.status(200).json({ status: "success", data: clubs });
+    const holdings = await Holding.findAll({ where: { status: "active" } });
+    res.status(200).json({ status: "success", data: holdings });
   } catch (error) {
     next(error);
   }
 };
 
-const getClub = async (req, res, next) => {
+const getHolding = async (req, res, next) => {
   try {
-    const club = await Club.findByPk(req.params.id, {
+    const holding = await Holding.findByPk(req.params.id, {
       include: [{ model: User, as: "Owners", attributes: ["id", "username"] }],
     });
 
-    if (!club || club.status !== "active")
-      throw new AppError("Club not found.", 404);
-    res.status(200).json({ status: "success", data: club });
+    if (!holding || holding.status !== "active")
+      throw new AppError("Holding not found.", 404);
+    res.status(200).json({ status: "success", data: holding });
   } catch (error) {
     next(error);
   }
 };
 
-const updateClub = async (req, res, next) => {
+const updateHolding = async (req, res, next) => {
   try {
     const { name, online, link, status } = req.body;
-    const club = await Club.findByPk(req.params.id);
+    const holding = await Holding.findByPk(req.params.id);
 
-    if (!club) throw new AppError("Club not found.", 404);
+    if (!holding) throw new AppError("Holding not found.", 404);
 
-    club.name = name || club.name;
-    club.online = online !== undefined ? online : club.online;
-    club.link = link !== undefined ? link : club.link;
-    if (status) club.status = status;
+    holding.name = name || holding.name;
+    holding.online = online !== undefined ? online : holding.online;
+    holding.link = link !== undefined ? link : holding.link;
+    if (status) holding.status = status;
 
-    await club.save();
-    res.status(200).json({ status: "success", data: club });
+    await holding.save();
+    res.status(200).json({ status: "success", data: holding });
   } catch (error) {
     next(error);
   }
 };
 
-const deleteClub = async (req, res, next) => {
+const deleteHolding = async (req, res, next) => {
   try {
-    const club = await Club.findByPk(req.params.id);
+    const holding = await Holding.findByPk(req.params.id);
 
-    if (!club) throw new AppError("Club not found.", 404);
+    if (!holding) throw new AppError("Holding not found.", 404);
 
     // try the Hard Delete
-    await club.destroy();
+    await holding.destroy();
 
     res.status(204).json({ status: "success", data: null });
   } catch (error) {
     // if SQL Server blocked it due to historical data => Soft Delete
     if (error.name === "SequelizeForeignKeyConstraintError") {
       try {
-        const clubToSoftDelete = await Club.findByPk(req.params.id);
+        const holdingToSoftDelete = await Holding.findByPk(req.params.id);
 
         // flip the status to inactive
-        clubToSoftDelete.status = "inactive";
-        await clubToSoftDelete.save();
+        holdingToSoftDelete.status = "inactive";
+        await holdingToSoftDelete.save();
 
         return res.status(200).json({
           status: "success",
           message:
-            "Club has historical events. It has been deactivated instead of deleted.",
+            "Holding has historical sessions. It has been deactivated instead of deleted.",
         });
       } catch (softDeleteError) {
         return next(softDeleteError);
@@ -119,7 +119,7 @@ const deleteClub = async (req, res, next) => {
 // add an Owner (can be done by existing Owner or Admin)
 const addOwner = async (req, res, next) => {
   try {
-    const clubId = req.params.id; // /clubs/:id/owners
+    const holdingId = req.params.id; // /holdings/:id/owners
     const { targetUserId } = req.body;
 
     if (!targetUserId)
@@ -129,13 +129,13 @@ const addOwner = async (req, res, next) => {
     if (!targetUser) throw new AppError("User not found.", 404);
 
     const existingOwner = await Owner.findOne({
-      where: { user_id: targetUserId, club_id: clubId },
+      where: { user_id: targetUserId, holding_id: holdingId },
     });
 
     if (existingOwner)
-      throw new AppError("User is already an owner of this club.", 400);
+      throw new AppError("User is already an owner of this Holding.", 400);
 
-    await Owner.create({ user_id: targetUserId, club_id: clubId });
+    await Owner.create({ user_id: targetUserId, holding_id: holdingId });
 
     res
       .status(201)
@@ -148,24 +148,24 @@ const addOwner = async (req, res, next) => {
 // remove an Owner (restricted to Admins)
 const removeOwner = async (req, res, next) => {
   try {
-    const clubId = req.params.id;
+    const holdingId = req.params.id;
     const ownerIdToRemove = req.params.ownerId;
 
-    // don't accidentally leave a club completely orphaned
-    const ownerCount = await Owner.count({ where: { club_id: clubId } });
+    // don't accidentally leave a Holding completely orphaned
+    const ownerCount = await Owner.count({ where: { holding_id: holdingId } });
     if (ownerCount <= 1) {
       throw new AppError(
-        "Cannot remove the last owner. Assign a new owner first or delete the club.",
+        "Cannot remove the last owner. Assign a new owner first or delete the Holding.",
         400,
       );
     }
 
     const deletedCount = await Owner.destroy({
-      where: { user_id: ownerIdToRemove, club_id: clubId },
+      where: { user_id: ownerIdToRemove, holding_id: holdingId },
     });
 
     if (deletedCount === 0)
-      throw new AppError("This user is not an owner of this club.", 404);
+      throw new AppError("This user is not an owner of this Holding.", 404);
 
     res
       .status(200)
@@ -176,11 +176,11 @@ const removeOwner = async (req, res, next) => {
 };
 
 module.exports = {
-  createClub,
-  getAllClubs,
-  getClub,
-  updateClub,
-  deleteClub,
+  createHolding,
+  getAllHoldings,
+  getHolding,
+  updateHolding,
+  deleteHolding,
   addOwner,
   removeOwner,
 };

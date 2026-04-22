@@ -14,7 +14,7 @@ const createRoom = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
-    const eventId = req.params.eventId;
+    const sessionId = req.params.sessionId;
     const { judge_id, teams } = req.body;
     // 'teams' expects: [{ team_id: 5, position: 'OG' }, { team_id: 8, position: 'OO' }...]
 
@@ -23,7 +23,7 @@ const createRoom = async (req, res, next) => {
     }
 
     const room = await Room.create(
-      { event_id: eventId, judge: judge_id, status: "scheduled" },
+      { session_id: sessionId, judge: judge_id, status: "scheduled" },
       { transaction },
     );
 
@@ -52,14 +52,14 @@ const createRoom = async (req, res, next) => {
   }
 };
 
-// fetch all rooms and their data for an event
-const getEventRooms = async (req, res, next) => {
+// fetch all rooms and their data for a session
+const getSessionRooms = async (req, res, next) => {
   try {
-    const eventId = req.params.eventId;
+    const sessionId = req.params.sessionId;
 
     // fetch the Room => RoomTeams => Teams => Users => RoomSpeakers
     const rooms = await Room.findAll({
-      where: { event_id: eventId },
+      where: { session_id: sessionId },
       include: [
         { model: User, as: "JudgeData", attributes: ["id", "username"] },
         {
@@ -113,6 +113,6 @@ const deleteRoom = async (req, res, next) => {
 
 module.exports = {
   createRoom,
-  getEventRooms,
+  getSessionRooms,
   deleteRoom,
 };

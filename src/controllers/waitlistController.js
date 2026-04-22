@@ -1,30 +1,33 @@
-const { Event, User, Waitlist } = require("../models/main");
+const { Session, User, Waitlist } = require("../models/main");
 const AppError = require("../utils/AppError");
 
-// any authenticated user can join a scheduled event
+// any authenticated user can join a scheduled session
 const joinWaitlist = async (req, res, next) => {
   try {
-    const eventId = req.params.eventId;
+    const sessionId = req.params.sessionId;
     const userId = req.user.id;
 
-    const event = await Event.findByPk(eventId);
-    if (!event || event.status !== "scheduled") {
-      throw new AppError("This event is not available for registration.", 400);
+    const session = await Session.findByPk(sessionId);
+    if (!session || session.status !== "scheduled") {
+      throw new AppError(
+        "This session is not available for registration.",
+        400,
+      );
     }
 
     // prevent duplicate registrations
     const existingEntry = await Waitlist.findOne({
-      where: { event_id: eventId, user_id: userId },
+      where: { session_id: sessionId, user_id: userId },
     });
 
     if (existingEntry) {
       throw new AppError(
-        "You are already on the waitlist for this event.",
+        "You are already on the waitlist for this session.",
         409,
       );
     }
 
-    await Waitlist.create({ event_id: eventId, user_id: userId });
+    await Waitlist.create({ session_id: sessionId, user_id: userId });
 
     res.status(201).json({
       status: "success",
@@ -37,15 +40,15 @@ const joinWaitlist = async (req, res, next) => {
 
 const leaveWaitlist = async (req, res, next) => {
   try {
-    const eventId = req.params.eventId;
+    const sessionId = req.params.sessionId;
     const userId = req.user.id;
 
     const deletedCount = await Waitlist.destroy({
-      where: { event_id: eventId, user_id: userId },
+      where: { session_id: sessionId, user_id: userId },
     });
 
     if (deletedCount === 0) {
-      throw new AppError("You are not on the waitlist for this event.", 404);
+      throw new AppError("You are not on the waitlist for this session.", 404);
     }
 
     res
@@ -56,11 +59,11 @@ const leaveWaitlist = async (req, res, next) => {
   }
 };
 
-const getEventWaitlist = async (req, res, next) => {
+const getSessionWaitlist = async (req, res, next) => {
   try {
-    const eventId = req.params.eventId;
+    const sessionId = req.params.sessionId;
 
-    const event = await Event.findByPk(eventId, {
+    const session = await Session.findByPk(sessionId, {
       include: [
         {
           model: User,
@@ -71,13 +74,13 @@ const getEventWaitlist = async (req, res, next) => {
       ],
     });
 
-    if (!event) throw new AppError("Event not found.", 404);
+    if (!session) throw new AppError("Session not found.", 404);
 
     res.status(200).json({
       status: "success",
       data: {
-        event_id: event.id,
-        registered_players: event.WaitlistedUsers,
+        session_id: session.id,
+        registered_players: session.WaitlistedUsers,
       },
     });
   } catch (error) {
@@ -85,4 +88,8 @@ const getEventWaitlist = async (req, res, next) => {
   }
 };
 
-module.exports = { joinWaitlist, leaveWaitlist, getEventWaitlist };
+module.exports = {
+  joinWaitlist,
+  leaveWaitlist,
+  getSessionWaitlist,
+};

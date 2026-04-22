@@ -34,6 +34,23 @@ const errorHandler = (err, req, res, next) => {
     });
   }
 
+  // JWT-specific errors
+  if (err.name === "JsonWebTokenError") {
+    return res.status(401).json({
+      status: "fail",
+      message: "Invalid token.",
+      details: err.message,
+    });
+  }
+
+  if (err.name === "TokenExpiredError") {
+    return res.status(401).json({
+      status: "fail",
+      message: "Your token has expired. Please log in again.",
+      details: err.message,
+    });
+  }
+
   // handler for custom error for known issues
   if (err.isOperational) {
     return res.status(err.statusCode).json({

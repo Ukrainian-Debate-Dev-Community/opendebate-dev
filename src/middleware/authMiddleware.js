@@ -1,19 +1,38 @@
-const { User, Admin, Owner, Room, Event, Team } = require("../models/main");
+const jwt = require("jsonwebtoken");
+const { User, Admin, Owner, Room, Session, Team } = require("../models/main");
 const AppError = require("../utils/AppError");
 
 // base Authenticator
 const authenticate = async (req, res, next) => {
   try {
-    const userId = req.header("x-user-id");
-    if (!userId) throw new AppError("Please provide x-user-id header.", 401);
+    // check for standard Bearer token header
+    const authHeader = req.headers["authorization"];
 
-    const user = await User.findByPk(userId);
-    if (!user || user.is_deleted) throw new AppError("User not found.", 401);
+    // extract the token (from "Bearer <token>")
+    const token = authHeader && authHeader.split(" ")[1];
+
+    if (!token) {
+      throw new AppError(
+        "You are not logged in. Please provide a valid token.",
+        401,
+      );
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+    // ensure user still exists (in case they were deleted after token generation)
+    const user = await User.findByPk(decoded.id);
+    if (!user || user.is_deleted) {
+      throw new AppError(
+        "The user belonging to this token no longer exists.",
+        401,
+      );
+    }
 
     req.user = user;
 
     // if user is an Admin, no need to check the other roles later
-    const isAdmin = await Admin.findOne({ where: { user_id: userId } });
+    const isAdmin = await Admin.findOne({ where: { user_id: user.id } });
     req.user.isAdmin = !!isAdmin; // attaches true or false
 
     next();
@@ -32,64 +51,66 @@ const restrictTo = (role) => {
       const userId = req.user.id;
 
       if (role === "owner") {
-        let targetClubId;
+        let targetHoldingId;
 
-        // creating an event (club_id is in the body)
-        if (req.body?.club_id) {
-          targetClubId = req.body.club_id;
+        // creating a session (holding_id is in the body)
+        if (req.body?.holding_id) {
+          targetHoldingId = req.body.holding_id;
         }
-        // direct Club routes
-        else if (req.baseUrl.includes("/clubs") && req.params.id) {
-          targetClubId = req.params.id;
+        // direct Holding routes
+        else if (req.baseUrl.includes("/holdings") && req.params.id) {
+          targetHoldingId = req.params.id;
         }
-        // Event routes (/:eventId and /events/:id)
+        // Session routes (/:sessionId and /sessions/:id)
         else if (
-          req.params.eventId ||
-          (req.baseUrl.includes("/events") && req.params.id)
+          req.params.sessionId ||
+          (req.baseUrl.includes("/sessions") && req.params.id)
         ) {
-          const eventIdToCheck = req.params.eventId || req.params.id;
-          const event = await Event.findByPk(eventIdToCheck);
-          if (!event) throw new AppError("Event not found.", 404);
-          targetClubId = event.club_id;
+          const sessionIdToCheck = req.params.sessionId || req.params.id;
+          const session = await Session.findByPk(sessionIdToCheck);
+          if (!session) throw new AppError("Session not found.", 404);
+          targetHoldingId = session.holding_id;
         }
         // Team routes (/teams/:teamId)
         else if (req.params.teamId) {
           const team = await Team.findByPk(req.params.teamId);
           if (!team) throw new AppError("Team not found.", 404);
 
-          const eventId = team.event_id || team.eventId;
-          const event = await Event.findByPk(eventId);
+          const sessionId = team.session_id;
+          const session = await Session.findByPk(sessionId);
 
-          if (!event) throw new AppError("Event for this team not found.", 404);
+          if (!session)
+            throw new AppError("Session for this team not found.", 404);
 
-          targetClubId = event.club_id || event.clubId;
+          targetHoldingId = session.holding_id;
         }
         // Room routes (/rooms/:roomId)
         else if (req.params.roomId) {
           const room = await Room.findByPk(req.params.roomId);
           if (!room) throw new AppError("Room not found.", 404);
 
-          const eventId = room.event_id || room.eventId;
-          const event = await Event.findByPk(eventId);
+          const sessionId = room.session_id || room.sessionId;
+          const session = await Session.findByPk(sessionId);
 
-          if (!event) throw new AppError("Event for this room not found.", 404);
+          if (!session)
+            throw new AppError("Session for this room not found.", 404);
 
-          targetClubId = event.club_id || event.clubId;
+          targetHoldingId = session.holding_id;
         }
 
-        if (!targetClubId) {
+        if (!targetHoldingId) {
           throw new AppError(
-            "Could not determine which club to check permissions for.",
+            "Could not determine which holding to check permissions for.",
             400,
           );
         }
 
-        // does this user actually own the targeted club
+        // does this user actually own the targeted holding
         const isOwner = await Owner.findOne({
-          where: { user_id: userId, club_id: targetClubId },
+          where: { user_id: userId, holding_id: targetHoldingId },
         });
 
-        if (!isOwner) throw new AppError("You do not own this club.", 403);
+        if (!isOwner) throw new AppError("You do not own this holding.", 403);
         return next();
       }
 
@@ -104,12 +125,13 @@ const restrictTo = (role) => {
           return next();
         }
 
-        // if the user isn't the Judge, check if for Club Owner
-        const event = await Event.findByPk(room.event_id);
-        if (!event) throw new AppError("Event for this room not found.", 404);
+        // if the user isn't the Judge, check if for Holding Owner
+        const session = await Session.findByPk(room.session_id);
+        if (!session)
+          throw new AppError("session for this room not found.", 404);
 
         const isOwner = await Owner.findOne({
-          where: { user_id: userId, club_id: event.club_id },
+          where: { user_id: userId, holding_id: session.holding_id },
         });
 
         if (isOwner) {
@@ -118,7 +140,7 @@ const restrictTo = (role) => {
 
         // if neither => block
         throw new AppError(
-          "You must be the assigned judge or the club owner to perform this action.",
+          "You must be the assigned judge or the holding owner to perform this action.",
           403,
         );
         return next();

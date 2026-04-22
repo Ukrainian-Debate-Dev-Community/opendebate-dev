@@ -2,11 +2,11 @@ const { Team, Waitlist, User } = require("../models/main");
 const AppError = require("../utils/AppError");
 const { Op } = require("sequelize");
 
-// helper that checks if users are already in a team for the event
-const checkExistingTeams = async (eventId, userIds) => {
+// helper that checks if users are already in a team for the session
+const checkExistingTeams = async (sessionId, userIds) => {
   const existingTeam = await Team.findOne({
     where: {
-      event_id: eventId,
+      session_id: sessionId,
       [Op.or]: [
         { opener: { [Op.in]: userIds } },
         { closer: { [Op.in]: userIds } },
@@ -15,7 +15,7 @@ const checkExistingTeams = async (eventId, userIds) => {
   });
   if (existingTeam) {
     throw new AppError(
-      "One or both users are already in a team for this event.",
+      "One or both users are already in a team for this session.",
       409,
     );
   }
@@ -24,7 +24,7 @@ const checkExistingTeams = async (eventId, userIds) => {
 // a user registers with a friend
 const registerTeam = async (req, res, next) => {
   try {
-    const eventId = req.params.eventId;
+    const sessionId = req.params.sessionId;
     const { partner_id } = req.body; // friend id
     const senderId = req.user.id;
 
@@ -42,10 +42,10 @@ const registerTeam = async (req, res, next) => {
     const userIds = [senderId, partner_id].filter((id) => id != null);
 
     // ensure neither user is already in a team
-    await checkExistingTeams(eventId, userIds);
+    await checkExistingTeams(sessionId, userIds);
 
     const newTeam = await Team.create({
-      event_id: eventId,
+      session_id: sessionId,
       opener: senderId,
       closer: partner_id,
     });
@@ -53,7 +53,7 @@ const registerTeam = async (req, res, next) => {
     // remove them from the waitlist if they were on it
     await Waitlist.destroy({
       where: {
-        event_id: eventId,
+        session_id: sessionId,
         user_id: { [Op.in]: userIds },
       },
     });
@@ -67,7 +67,7 @@ const registerTeam = async (req, res, next) => {
 // Owner manually pairs two users
 const createTeam = async (req, res, next) => {
   try {
-    const eventId = req.params.eventId;
+    const sessionId = req.params.sessionId;
     const { opener, closer } = req.body; // IDs of the two users
 
     if (!opener || !closer) {
@@ -79,10 +79,10 @@ const createTeam = async (req, res, next) => {
     const userIds = [opener, closer].filter((id) => id != null);
 
     // ensure neither user is already in a team
-    await checkExistingTeams(eventId, userIds);
+    await checkExistingTeams(sessionId, userIds);
 
     const newTeam = await Team.create({
-      event_id: eventId,
+      session_id: sessionId,
       opener: opener,
       closer: closer,
     });
@@ -90,7 +90,7 @@ const createTeam = async (req, res, next) => {
     // remove them from the waitlist if they were on it
     await Waitlist.destroy({
       where: {
-        event_id: eventId,
+        session_id: sessionId,
         user_id: { [Op.in]: userIds },
       },
     });
@@ -101,13 +101,13 @@ const createTeam = async (req, res, next) => {
   }
 };
 
-// now everyone can fetch all teams for the event
-const getEventTeams = async (req, res, next) => {
+// now everyone can fetch all teams for the Session
+const getSessionTeams = async (req, res, next) => {
   try {
-    const eventId = req.params.eventId;
+    const sessionId = req.params.sessionId;
 
     const teams = await Team.findAll({
-      where: { event_id: eventId },
+      where: { session_id: sessionId },
       include: [
         { model: User, as: "OpenerData", attributes: ["id", "username"] },
         { model: User, as: "CloserData", attributes: ["id", "username"] },
@@ -133,7 +133,7 @@ const updateTeam = async (req, res, next) => {
     // check if the NEW players are already in another team
     const existingTeam = await Team.findOne({
       where: {
-        event_id: team.event_id,
+        session_id: team.session_id,
         id: { [Op.ne]: team.id }, // (exclude the current team's ID)
         [Op.or]: [
           { opener: { [Op.in]: newUserIds } },
@@ -160,14 +160,17 @@ const updateTeam = async (req, res, next) => {
     // remove the NEW players from the waitlist
     if (newUserIds.length > 0) {
       await Waitlist.destroy({
-        where: { event_id: team.event_id, user_id: { [Op.in]: newUserIds } },
+        where: {
+          session_id: team.session_id,
+          user_id: { [Op.in]: newUserIds },
+        },
       });
     }
 
     // and put the REMOVED players back on the waitlist safely
     for (const userId of removedUsers) {
       await Waitlist.findOrCreate({
-        where: { event_id: team.event_id, user_id: userId },
+        where: { session_id: team.session_id, user_id: userId },
       });
     }
 
@@ -192,7 +195,7 @@ const deleteTeam = async (req, res, next) => {
     // return the players to the waitlist
     for (const userId of usersToWaitlist) {
       await Waitlist.findOrCreate({
-        where: { event_id: team.event_id, user_id: userId },
+        where: { session_id: team.session_id, user_id: userId },
       });
     }
 
@@ -208,7 +211,7 @@ const deleteTeam = async (req, res, next) => {
 module.exports = {
   registerTeam,
   createTeam,
-  getEventTeams,
+  getSessionTeams,
   updateTeam,
   deleteTeam,
 };

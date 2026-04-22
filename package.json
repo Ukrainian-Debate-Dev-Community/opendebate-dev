@@ -1,6 +1,6 @@
 {
   "name": "debate-api",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Complex API for managing Debate Clubs and Events",
   "main": "src/app.js",
   "scripts": {
@@ -27,6 +27,7 @@
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
     "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
     "sequelize": "^6.37.8",
     "tedious": "^19.2.1"
   },

@@ -2,13 +2,13 @@ const express = require("express");
 const router = express.Router();
 
 const userRoutes = require("./userRoutes");
-const clubRoutes = require("./clubRoutes");
-const eventRoutes = require("./eventRoutes");
+const holdingRoutes = require("./holdingRoutes");
+const sessionRoutes = require("./sessionRoutes");
 const adminRoutes = require("./adminRoutes");
 
 router.use("/users", userRoutes);
-router.use("/clubs", clubRoutes);
-router.use("/events", eventRoutes);
+router.use("/holdings", holdingRoutes);
+router.use("/sessions", sessionRoutes);
 router.use("/admins", adminRoutes);
 
 module.exports = router;

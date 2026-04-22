@@ -1,7 +1,15 @@
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
+const jwt = require("jsonwebtoken");
 const { User } = require("../models/main");
 const AppError = require("../utils/AppError");
+
+// helper to sign tokens with user_id
+const signToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN,
+  });
+};
 
 const createUser = async (req, res, next) => {
   try {
@@ -21,13 +29,13 @@ const createUser = async (req, res, next) => {
       password: hashedPassword,
     });
 
-    // response
+    // Generate JWT
+    const token = signToken(newUser.id);
+
     res.status(201).json({
       status: "success",
-      data: {
-        id: newUser.id,
-        username: newUser.username,
-      },
+      token,
+      data: { id: newUser.id, username: newUser.username },
     });
   } catch (error) {
     // pass all errors to the global handler because I'm cool as fuck
@@ -55,13 +63,13 @@ const login = async (req, res, next) => {
       throw new AppError("Invalid credentials.", 401);
     }
 
+    const token = signToken(user.id);
+
     res.status(200).json({
       status: "success",
       message: "Login successful.",
-      data: {
-        id: user.id,
-        username: user.username,
-      },
+      token,
+      data: { id: user.id, username: user.username },
     });
   } catch (error) {
     next(error);
