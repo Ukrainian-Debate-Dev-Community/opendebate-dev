@@ -4,6 +4,7 @@ const {
   RoomSpeaker,
   Team,
   User,
+  Session,
   sequelize,
 } = require("../models/main");
 const AppError = require("../utils/AppError");
@@ -57,16 +58,25 @@ const getSessionRooms = async (req, res, next) => {
   try {
     const sessionId = req.params.sessionId;
 
-    // fetch the Room => RoomTeams => Teams => Users => RoomSpeakers
+    // fetch the session name
+    const session = await Session.findByPk(sessionId, {
+      attributes: ["id", "name"],
+    });
+    if (!session) throw new AppError("Session not found.", 404);
+
+    // excludes are compared to old response from v1.0
     const rooms = await Room.findAll({
       where: { session_id: sessionId },
+      attributes: ["id", "status"], // excludes session_id and raw judge ID
       include: [
         { model: User, as: "JudgeData", attributes: ["id", "username"] },
         {
           model: RoomTeam,
+          attributes: ["id", "position", "rank"], // excludes room_id and team_id
           include: [
             {
               model: Team,
+              attributes: ["id"], // excludes session_id, opener, closer
               include: [
                 {
                   model: User,
@@ -89,7 +99,13 @@ const getSessionRooms = async (req, res, next) => {
       ],
     });
 
-    res.status(200).json({ status: "success", data: rooms });
+    res.status(200).json({
+      status: "success",
+      data: {
+        session: session,
+        rooms: rooms,
+      },
+    });
   } catch (error) {
     next(error);
   }

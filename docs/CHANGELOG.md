@@ -7,6 +7,19 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - ELO-system
 
+## [1.2.0] - 2026-04-25
+
+### Added
+
+- **Motions Engine:** Introduced the `Motion` model and dedicated `/sessions/:sessionId/motion` nested routes.
+- **Competitive Integrity:** Implemented backend redaction logic. If a motion is marked as `is_released: false`, the API intercepts standard user requests and strips the `motion_text` and `infoslide` to prevent early leaks, revealing them only when toggled by the Owner.
+- **Type Validation:** Added strict controller-level validation for Holding creation, enforcing the `academic` or `personal` type distinction.
+
+### Changed
+
+- **Query Optimisation:** Refactored `getSessionRooms` and `getSessionTeams` to explicitly select attributes, removing redundant raw foreign-key IDs and dramatically reducing JSON payload sizes.
+- **Session Context:** Read requests for nested session resources now automatically fetch and wrap the `session.name` in the payload for easier frontend rendering.
+
 ## [1.1.0] - 2026-04-22
 
 ### Added

@@ -3,14 +3,15 @@ const AppError = require("../utils/AppError");
 
 const createSession = async (req, res, next) => {
   try {
-    const { holding_id, date } = req.body;
+    const { name, holding_id, date } = req.body;
 
-    if (!holding_id || !date) {
-      throw new AppError("Please provide both holding_id and date.", 400);
+    if (!name || !holding_id || !date) {
+      throw new AppError("Please provide name, holding_id and date.", 400);
     }
 
     const newSession = await Session.create({
       holding_id: holding_id,
+      name: name,
       date,
       status: "scheduled",
     });
@@ -36,11 +37,12 @@ const getHoldingSessions = async (req, res, next) => {
 
 const updateSession = async (req, res, next) => {
   try {
-    const { date, status } = req.body;
+    const { name, date, status } = req.body;
     const session = await Session.findByPk(req.params.id);
 
     if (!session) throw new AppError("Session not found.", 404);
 
+    session.name = name !== undefined ? name : session.name;
     session.date = date || session.date;
     session.status = status || session.status; // scheduled or archived
 

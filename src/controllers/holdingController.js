@@ -3,11 +3,19 @@ const AppError = require("../utils/AppError");
 
 const createHolding = async (req, res, next) => {
   try {
-    const { name, online, link, owner_id } = req.body;
+    const { name, type, online, link, owner_id } = req.body;
 
     if (!name || !owner_id) {
       throw new AppError(
         "Please provide a holding name and an initial owner_id.",
+        400,
+      );
+    }
+
+    // controller-level validation for type
+    if (type && !["academic", "personal"].includes(type)) {
+      throw new AppError(
+        "Holding type must be strictly 'academic' or 'personal'.",
         400,
       );
     }
@@ -23,6 +31,7 @@ const createHolding = async (req, res, next) => {
 
     const newHolding = await Holding.create({
       name,
+      type: type || "academic",
       online: online || false,
       link: link || null,
     });
@@ -64,12 +73,20 @@ const getHolding = async (req, res, next) => {
 
 const updateHolding = async (req, res, next) => {
   try {
-    const { name, online, link, status } = req.body;
+    const { name, type, online, link, status } = req.body;
     const holding = await Holding.findByPk(req.params.id);
 
     if (!holding) throw new AppError("Holding not found.", 404);
 
+    if (type && !["academic", "personal"].includes(type)) {
+      throw new AppError(
+        "Holding type must be strictly 'academic' or 'personal'.",
+        400,
+      );
+    }
+
     holding.name = name || holding.name;
+    if (type) holding.type = type;
     holding.online = online !== undefined ? online : holding.online;
     holding.link = link !== undefined ? link : holding.link;
     if (status) holding.status = status;

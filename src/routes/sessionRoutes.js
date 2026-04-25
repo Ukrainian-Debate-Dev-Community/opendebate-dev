@@ -7,6 +7,7 @@ const { authenticate, restrictTo } = require("../middleware/authMiddleware");
 const waitlistRoutes = require("./waitlistRoutes");
 const teamRoutes = require("./teamRoutes");
 const roomRoutes = require("./roomRoutes");
+const motionRoutes = require("./motionRoutes");
 
 // I can cover authentication in parent, lmao
 router.use(authenticate);
@@ -14,6 +15,7 @@ router.use(authenticate);
 router.use("/:sessionId/waitlist", waitlistRoutes);
 router.use("/:sessionId/teams", teamRoutes);
 router.use("/:sessionId/rooms", roomRoutes);
+router.use("/:sessionId/motion", motionRoutes);
 
 // Session core routes
 router.get("/holding/:holdingId", sessionController.getHoldingSessions);

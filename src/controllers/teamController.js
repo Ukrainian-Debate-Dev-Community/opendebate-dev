@@ -1,4 +1,4 @@
-const { Team, Waitlist, User } = require("../models/main");
+const { Team, Waitlist, User, Session } = require("../models/main");
 const AppError = require("../utils/AppError");
 const { Op } = require("sequelize");
 
@@ -106,15 +106,24 @@ const getSessionTeams = async (req, res, next) => {
   try {
     const sessionId = req.params.sessionId;
 
+    // fetch the session just to get its name for the response
+    const session = await Session.findByPk(sessionId, {
+      attributes: ["id", "name"],
+    });
+    if (!session) throw new AppError("Session not found.", 404);
+
     const teams = await Team.findAll({
       where: { session_id: sessionId },
+      attributes: ["id"],
       include: [
         { model: User, as: "OpenerData", attributes: ["id", "username"] },
         { model: User, as: "CloserData", attributes: ["id", "username"] },
       ],
     });
 
-    res.status(200).json({ status: "success", data: teams });
+    res
+      .status(200)
+      .json({ status: "success", data: { session: session, teams: teams } });
   } catch (error) {
     next(error);
   }
