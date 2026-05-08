@@ -23,8 +23,8 @@ RESTful API built with Node.js and Express to manage debate clubs, tournaments, 
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/DmytroTarasenk0/Debate-API.git
-   cd Debate-API
+   git clone https://github.com/Ukrainian-Debate-Dev-Community/opendebate-dev.git
+   cd opendebate-dev
    ```
 
 2. **Install dependencies:**
@@ -47,7 +47,14 @@ RESTful API built with Node.js and Express to manage debate clubs, tournaments, 
    JWT_EXPIRES_IN = 1d
    ```
 
-4. **Start the Development Server:**
+4. **Database Setup**
+
+   ```bash
+   npx sequelize-cli db:migrate
+   npx sequelize-cli db:seed:all
+   ```
+
+5. **Start the Development Server:**
    ```bash
    npm run dev
    ```

@@ -1,4 +1,4 @@
-const { Room, RoomTeam, RoomSpeaker, sequelize } = require("../models/main");
+const { Room, RoomTeam, RoomSpeaker, sequelize } = require("../models");
 const AppError = require("../utils/AppError");
 
 const submitScores = async (req, res, next) => {

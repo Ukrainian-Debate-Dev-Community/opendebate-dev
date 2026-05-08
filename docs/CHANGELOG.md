@@ -5,7 +5,20 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
-- ELO-system
+### Added
+
+- **Swagger UI:** Initialised OpenAPI documentation and interactive testing environment.
+
+## [1.2.1] - 2026-05-08
+
+### Changed
+
+- **Database Management:** Transitioned from `sequelize.sync()` to a formal Sequelize CLI migration and seeding pipeline for production readiness.
+- **Module Imports:** Refactored controller and middleware imports to target the explicit `models/index.js`.
+
+### Documentation
+
+- **README:** Updated local setup instructions to reflect the new database migration and seeding commands.
 
 ## [1.2.0] - 2026-04-25
 

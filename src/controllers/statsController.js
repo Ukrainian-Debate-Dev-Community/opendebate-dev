@@ -1,4 +1,4 @@
-const { RoomSpeaker, RoomTeam, Team, sequelize } = require("../models/main");
+const { RoomSpeaker, RoomTeam, Team, sequelize } = require("../models");
 const AppError = require("../utils/AppError");
 const { Op } = require("sequelize");
 

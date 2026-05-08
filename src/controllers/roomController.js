@@ -6,7 +6,7 @@ const {
   User,
   Session,
   sequelize,
-} = require("../models/main");
+} = require("../models");
 const AppError = require("../utils/AppError");
 const { Op } = require("sequelize");
 

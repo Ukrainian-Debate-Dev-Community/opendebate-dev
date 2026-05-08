@@ -1,4 +1,4 @@
-const { Session, User, Waitlist } = require("../models/main");
+const { Session, User, Waitlist } = require("../models");
 const AppError = require("../utils/AppError");
 
 // any authenticated user can join a scheduled session

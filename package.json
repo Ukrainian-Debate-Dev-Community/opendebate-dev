@@ -1,7 +1,7 @@
 {
   "name": "debate-api",
-  "version": "1.2.0",
-  "description": "Complex API for managing Debate Clubs and Events",
+  "version": "1.2.1",
+  "description": "Complex API for managing Debates",
   "main": "src/app.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
@@ -32,6 +32,7 @@
     "tedious": "^19.2.1"
   },
   "devDependencies": {
-    "nodemon": "^3.1.14"
+    "nodemon": "^3.1.14",
+    "sequelize-cli": "^6.6.5"
   }
 }

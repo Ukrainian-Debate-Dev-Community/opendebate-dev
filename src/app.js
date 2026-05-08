@@ -3,7 +3,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 require("dotenv").config();
 
-const { sequelize } = require("./models/main");
+const { sequelize } = require("./models");
 const apiRoutes = require("./routes/main");
 
 const errorHandler = require("./middleware/errorHandler");
@@ -27,10 +27,6 @@ const startServer = async () => {
   try {
     await sequelize.authenticate();
     console.log("Database connection has been established successfully.");
-
-    // { force: true } GO ON DROP THE TABLE
-    await sequelize.sync();
-    console.log("All models were synchronised successfully.");
 
     app.listen(PORT, () => {
       console.log(`Server is listening on port ${PORT}`);

@@ -1,5 +1,5 @@
 const jwt = require("jsonwebtoken");
-const { User, Admin, Owner, Room, Session, Team } = require("../models/main");
+const { User, Admin, Owner, Room, Session, Team } = require("../models");
 const AppError = require("../utils/AppError");
 
 // base Authenticator

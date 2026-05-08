@@ -1,4 +1,4 @@
-const { Team, Waitlist, User, Session } = require("../models/main");
+const { Team, Waitlist, User, Session } = require("../models");
 const AppError = require("../utils/AppError");
 const { Op } = require("sequelize");
 

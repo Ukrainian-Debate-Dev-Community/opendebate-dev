@@ -1,4 +1,4 @@
-const { Holding, Owner, User } = require("../models/main");
+const { Holding, Owner, User } = require("../models");
 const AppError = require("../utils/AppError");
 
 const createHolding = async (req, res, next) => {

@@ -1,4 +1,4 @@
-const { Session, Holding } = require("../models/main");
+const { Session, Holding } = require("../models");
 const AppError = require("../utils/AppError");
 
 const createSession = async (req, res, next) => {

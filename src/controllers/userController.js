@@ -1,7 +1,7 @@
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
-const { User } = require("../models/main");
+const { User } = require("../models");
 const AppError = require("../utils/AppError");
 
 // helper to sign tokens with user_id

@@ -1,4 +1,4 @@
-const { Motion, Session, Owner } = require("../models/main");
+const { Motion, Session, Owner } = require("../models");
 const AppError = require("../utils/AppError");
 
 const createMotion = async (req, res, next) => {

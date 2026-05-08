@@ -1,4 +1,4 @@
-const { Admin, User } = require("../models/main");
+const { Admin, User } = require("../models");
 const AppError = require("../utils/AppError");
 
 // admin grants admin privileges to a standard user
