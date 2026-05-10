@@ -5,21 +5,16 @@ module.exports = {
     username: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_DATABASE,
-    host: process.env.DB_SERVER,
-    dialect: "mssql",
-    dialectOptions: {
-      options: { encrypt: false, trustServerCertificate: true },
-    },
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT || 5432,
+    dialect: "postgres",
   },
-  // same as dev, questions?
   production: {
     username: process.env.DB_USER,
     password: process.env.DB_PASSWORD,
     database: process.env.DB_DATABASE,
-    host: process.env.DB_SERVER,
-    dialect: "mssql",
-    dialectOptions: {
-      options: { encrypt: false, trustServerCertificate: true },
-    },
+    host: process.env.DB_HOST,
+    port: process.env.DB_PORT || 5432,
+    dialect: "postgres",
   },
 };
