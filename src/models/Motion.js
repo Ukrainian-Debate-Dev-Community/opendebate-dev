@@ -6,8 +6,8 @@ module.exports = (sequelize) => {
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
       session_id: { type: DataTypes.INTEGER, allowNull: false },
-      motion_text: { type: DataTypes.STRING("MAX"), allowNull: false },
-      infoslide: { type: DataTypes.STRING("MAX"), allowNull: true },
+      motion_text: { type: DataTypes.TEXT, allowNull: false },
+      infoslide: { type: DataTypes.TEXT, allowNull: true },
       is_released: { type: DataTypes.BOOLEAN, defaultValue: false },
     },
     { tableName: "motions" },

@@ -80,8 +80,8 @@ module.exports = {
         references: { model: "sessions", key: "id" },
         onDelete: "CASCADE",
       },
-      motion_text: { type: Sequelize.STRING("MAX"), allowNull: false },
-      infoslide: { type: Sequelize.STRING("MAX"), allowNull: true },
+      motion_text: { type: Sequelize.TEXT, allowNull: false },
+      infoslide: { type: Sequelize.TEXT, allowNull: true },
       is_released: { type: Sequelize.BOOLEAN, defaultValue: false },
     });
 
