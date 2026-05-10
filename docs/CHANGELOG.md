@@ -9,6 +9,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **Swagger UI:** Initialised OpenAPI documentation and interactive testing environment.
 
+## [1.3.0] - 2026-05-10
+
+### Changed
+
+- **Database Engine:** Migrated the core database dialect from MS SQL Server (`tedious`) to PostgreSQL (`pg`, `pg-hstore`).
+- **Schema Types:** Converted MS SQL-specific `STRING("MAX")` definitions to PostgreSQL `TEXT` types.
+- **Configuration:** Updated environment variables to standardise around PostgreSQL conventions (replaced `DB_SERVER` with `DB_HOST` and added `DB_PORT`).
+
 ## [1.2.1] - 2026-05-08
 
 ### Changed

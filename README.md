@@ -14,7 +14,7 @@ RESTful API built with Node.js and Express to manage debate clubs, tournaments, 
 ## Tech Stack
 
 - **Backend:** Node.js, Express.js
-- **Database:** MS SQL Server
+- **Database:** PostgreSQL
 - **ORM:** Sequelize
 - **Security:** bcryptjs (password hashing), JSON Web Tokens (JWT) for secure authentication.
 
@@ -34,20 +34,13 @@ RESTful API built with Node.js and Express to manage debate clubs, tournaments, 
    ```
 
 3. **Environment Configuration:**
-   Create a `.env` file in the root directory and add your MS SQL database credentials:
+   Copy the provided example environment file and fill in your local PostgreSQL credentials and JWT secrets:
 
-   ```env
-   PORT = 3000
-   DB_SERVER = Server_name
-   DB_USER = user
-   DB_PASSWORD = password
-   DB_DATABASE = DB_name
-   NODE_ENV = development
-   JWT_SECRET = secret_string
-   JWT_EXPIRES_IN = 1d
+   ```bash
+   cp .env.example .env
    ```
 
-4. **Database Setup**
+4. **Database Setup:**
 
    ```bash
    npx sequelize-cli db:migrate
