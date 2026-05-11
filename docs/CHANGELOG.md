@@ -9,6 +9,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 - **Swagger UI:** Initialised OpenAPI documentation and interactive testing environment.
 
+## [1.3.1] - 2026-05-11
+
+### Fixed
+
+- **Routing:** Corrected casing in the `adminRoutes.js` filename to prevent environment-specific resolution errors.
+
+### Added
+
+- **Infrastructure:** Introduced a `Dockerfile` for containerised image building.
+- **Dependencies:** Moved `sequelize-cli` to core dependencies to support automated database migrations in production containers.
+
 ## [1.3.0] - 2026-05-10
 
 ### Changed
