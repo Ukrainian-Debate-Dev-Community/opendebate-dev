@@ -21,4 +21,10 @@ module.exports = [
       'n/no-unpublished-import': 'off',
     },
   },
+  {
+    files: ['src/migrations/**/*.js', 'src/seeders/**/*.js'],
+    rules: {
+      'no-unused-vars': 'off',
+    },
+  },
 ];
