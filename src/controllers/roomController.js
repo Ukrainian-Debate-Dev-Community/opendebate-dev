@@ -8,7 +8,6 @@ const {
   sequelize,
 } = require("../models");
 const AppError = require("../utils/AppError");
-const { Op } = require("sequelize");
 
 // Owner hand-picks 4 teams, 1 judge, and their exact positions
 const createRoom = async (req, res, next) => {

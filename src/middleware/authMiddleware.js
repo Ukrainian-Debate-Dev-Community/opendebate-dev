@@ -139,11 +139,12 @@ const restrictTo = (role) => {
         }
 
         // if neither => block
-        throw new AppError(
-          "You must be the assigned judge or the holding owner to perform this action.",
-          403,
+        return next(
+          new AppError(
+            "You must be the assigned judge or the holding owner to perform this action.",
+            403,
+          ),
         );
-        return next();
       }
 
       throw new AppError("Unauthorized role.", 403);

@@ -1,5 +1,4 @@
 const { RoomSpeaker, RoomTeam, Team, sequelize } = require("../models");
-const AppError = require("../utils/AppError");
 const { Op } = require("sequelize");
 
 const getUserStats = async (req, res, next) => {
