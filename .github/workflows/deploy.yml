@@ -34,6 +34,9 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: ghcr.io/${{ github.repository_owner }}/opendebate-api
+          tags: |
+            type=raw,value=main,enable={{is_default_branch}}
+            type=sha,prefix=sha-,format=short
       - name: Build and push Docker image
         id: push
         uses: docker/build-push-action@v7
@@ -51,3 +54,26 @@ jobs:
           subject-name: ghcr.io/${{ github.repository_owner }}/opendebate-api
           subject-digest: ${{ steps.push.outputs.digest }}
           push-to-registry: true
+
+  bump-manifest:
+    needs: build-and-deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: Ukrainian-Debate-Dev-Community/opendebate-k8s
+          token: ${{ secrets.K8S_REPO_TOKEN }}
+      - name: Bump image tag
+        run: |
+          SHORT_SHA="$(echo ${{ github.sha }} | cut -c1-7)"
+          IMAGE="opendebate-api:sha-${SHORT_SHA}"
+          sed -i "s|opendebate-api:.*|${IMAGE}|" \
+            apps/api/deployment.yaml
+      - name: Commit & push
+        run: |
+          git config user.name  "opendebate-bot"
+          git config user.email "bot@users.noreply.github.com"
+          git add apps/api/deployment.yaml
+          MSG="chore(api): bump image to sha-${GITHUB_SHA::7}"
+          git diff --cached --quiet || git commit -m "${MSG}"
+          git push
