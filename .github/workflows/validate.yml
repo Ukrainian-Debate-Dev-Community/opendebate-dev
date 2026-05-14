@@ -58,7 +58,6 @@ jobs:
 
       - name: npm audit
         run: npm audit --audit-level=high --omit=dev
-        continue-on-error: true
 
       - uses: docker/setup-buildx-action@v4
 
