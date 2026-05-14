@@ -10,6 +10,9 @@ name: Publish Docker image
 "on":
   push:
     branches: [main]
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -63,17 +66,19 @@ jobs:
         with:
           repository: Ukrainian-Debate-Dev-Community/opendebate-k8s
           token: ${{ secrets.K8S_REPO_TOKEN }}
+      - name: Set up kustomize
+        uses: imranismail/setup-kustomize@v2
       - name: Bump image tag
         run: |
           SHORT_SHA="$(echo ${{ github.sha }} | cut -c1-7)"
-          IMAGE="opendebate-api:sha-${SHORT_SHA}"
-          sed -i "s|opendebate-api:.*|${IMAGE}|" \
-            apps/api/deployment.yaml
+          IMAGE="ghcr.io/ukrainian-debate-dev-community/opendebate-api"
+          cd apps/api
+          kustomize edit set image "${IMAGE}=${IMAGE}:sha-${SHORT_SHA}"
       - name: Commit & push
         run: |
           git config user.name  "opendebate-bot"
           git config user.email "bot@users.noreply.github.com"
-          git add apps/api/deployment.yaml
+          git add apps/api/kustomization.yaml
           MSG="chore(api): bump image to sha-${GITHUB_SHA::7}"
           git diff --cached --quiet || git commit -m "${MSG}"
           git push
