@@ -61,24 +61,79 @@ jobs:
   bump-manifest:
     needs: build-and-deploy
     runs-on: ubuntu-latest
+    env:
+      K8S_REPO: Ukrainian-Debate-Dev-Community/opendebate-k8s
     steps:
       - uses: actions/checkout@v6
         with:
-          repository: Ukrainian-Debate-Dev-Community/opendebate-k8s
+          repository: ${{ env.K8S_REPO }}
           token: ${{ secrets.K8S_REPO_TOKEN }}
+
       - name: Set up kustomize
         uses: imranismail/setup-kustomize@v3
+
       - name: Bump image tag
+        id: bump
         run: |
           SHORT_SHA="$(echo ${{ github.sha }} | cut -c1-7)"
           IMAGE="ghcr.io/ukrainian-debate-dev-community/opendebate-api"
           cd apps/api
           kustomize edit set image "${IMAGE}=${IMAGE}:sha-${SHORT_SHA}"
-      - name: Commit & push
+          echo "short_sha=${SHORT_SHA}" >> "${GITHUB_OUTPUT}"
+
+      - name: Open signed PR with image bump
+        env:
+          GH_TOKEN: ${{ secrets.K8S_REPO_TOKEN }}
+          SHORT_SHA: ${{ steps.bump.outputs.short_sha }}
         run: |
-          git config user.name  "opendebate-bot"
-          git config user.email "bot@users.noreply.github.com"
-          git add apps/api/kustomization.yaml
-          MSG="chore(api): bump image to sha-${GITHUB_SHA::7}"
-          git diff --cached --quiet || git commit -m "${MSG}"
-          git push
+          set -euo pipefail
+
+          BRANCH="bot/bump-api-${SHORT_SHA}"
+          MSG="chore(api): bump image to sha-${SHORT_SHA}"
+          PATH_IN_REPO="apps/api/kustomization.yaml"
+
+          # No-op if the file didn't actually change (e.g. retry after merge)
+          if git -C . diff --quiet -- "${PATH_IN_REPO}"; then
+            echo "No manifest change — skipping PR."
+            exit 0
+          fi
+
+          BASE_OID=$(gh api "repos/${K8S_REPO}/git/refs/heads/main" --jq .object.sha)
+
+          # Recreate branch (delete if leftover from a prior failed attempt;
+          # closes any stale PR for the same SHA).
+          gh api "repos/${K8S_REPO}/git/refs/heads/${BRANCH}" -X DELETE 2>/dev/null || true
+          gh api "repos/${K8S_REPO}/git/refs" \
+            --method POST \
+            -f ref="refs/heads/${BRANCH}" \
+            -f sha="${BASE_OID}"
+
+          # Commit via GraphQL createCommitOnBranch — produces a GitHub-signed
+          # (verified) commit, satisfying the required_signatures rule without
+          # managing GPG/SSH keys in CI.
+          CONTENT_B64=$(base64 -w0 "${PATH_IN_REPO}")
+          jq -n \
+            --arg repo   "${K8S_REPO}" \
+            --arg branch "${BRANCH}" \
+            --arg oid    "${BASE_OID}" \
+            --arg path   "${PATH_IN_REPO}" \
+            --arg content "${CONTENT_B64}" \
+            --arg msg    "${MSG}" \
+            '{
+              query: "mutation($input: CreateCommitOnBranchInput!) { createCommitOnBranch(input: $input) { commit { url } } }",
+              variables: {
+                input: {
+                  branch: { repositoryNameWithOwner: $repo, branchName: $branch },
+                  message: { headline: $msg },
+                  fileChanges: { additions: [{ path: $path, contents: $content }] },
+                  expectedHeadOid: $oid
+                }
+              }
+            }' \
+          | gh api graphql --input -
+
+          gh pr create -R "${K8S_REPO}" \
+            --base main \
+            --head "${BRANCH}" \
+            --title "${MSG}" \
+            --body "Automated image bump from opendebate-dev@${GITHUB_SHA}"
