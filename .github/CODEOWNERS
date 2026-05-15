@@ -1,0 +1,8 @@
+# Default: app code reviewed by @DmytroTarasenk0.
+* @DmytroTarasenk0
+
+# CI/CD config — owned by platform maintainer only.
+# Last matching rule wins, so this overrides the * default for these paths.
+/.github/                      @thefirstarcher
+/Dockerfile                    @thefirstarcher
+/.dockerignore                 @thefirstarcher
