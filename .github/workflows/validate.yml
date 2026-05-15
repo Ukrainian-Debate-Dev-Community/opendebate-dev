@@ -3,24 +3,9 @@ name: Validate
 
 "on":
   pull_request:
-    paths:
-      - "src/**"
-      - "package.json"
-      - "package-lock.json"
-      - "eslint.config.js"
-      - "Dockerfile"
-      - ".dockerignore"
-      - ".github/workflows/**"
+    branches: [main]
   push:
     branches: [main]
-    paths:
-      - "src/**"
-      - "package.json"
-      - "package-lock.json"
-      - "eslint.config.js"
-      - "Dockerfile"
-      - ".dockerignore"
-      - ".github/workflows/**"
 
 jobs:
   validate:
