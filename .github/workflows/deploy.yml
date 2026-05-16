@@ -147,3 +147,8 @@ jobs:
             --head "${BRANCH}" \
             --title "${MSG}" \
             --body "Automated image bump from opendebate-dev@${GITHUB_SHA}"
+
+          # Auto-merge via the opendebate-bot token. The app is a bypass actor
+          # in main-protection.json (bypass_mode: pull_request), so it satisfies
+          # the CODEOWNERS rule at merge time once required status checks pass.
+          gh pr merge -R "${K8S_REPO}" "${BRANCH}" --squash --auto --delete-branch
