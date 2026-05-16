@@ -1,4 +1,4 @@
-# 4. Speaker-Centric Universal Architecture
+# 4. Holdings, Events, Rooms, and Format Plugins
 
 ## Status
 
@@ -6,88 +6,103 @@ Proposed
 
 ## Context
 
-The current API (v1) is hardcoded to the British Parliamentary (BP) debate format:
-- Teams are fixed at 2 speakers (opener/closer)
-- Rooms require exactly 4 teams in positions OG/OO/CG/CO (enum)
-- Scoring is a single integer per speaker
-- There is no support for adjudicator panels, multi-criteria scoring, or reply speeches
+The current API is British Parliamentary (BP) specific:
+- `holdings` already represent the owning organisation/container.
+- `sessions` represent one dated debate event under a holding.
+- `rooms` represent one concrete BP debate instance.
+- `teams` are fixed pairs with `opener` and `closer`.
+- `room_teams` store BP positions (`OG`, `OO`, `CG`, `CO`) and ranks.
+- `room_speakers` store a user and a single inline score.
+- `waitlists` are the only registration structure and require platform users.
+- `rooms.judge` supports only one judge.
 
-This makes it impossible to store events in any other format — Australs (3+reply, 2 teams), Policy (cross-examination), Lincoln-Douglas (1v1), WSDC (3+reply, multi-criteria), Public Forum, or custom formats.
-
-The platform's goal is to serve ANY debate community, not just BP. We need a schema that can store any debate event without structural changes.
-
-We studied Tabbycat (the open-source gold standard for debate tabulation) and adopted key lessons from its architecture while simplifying its approach.
+This works for a simple BP event, but it prevents guest registration, judging
+panels, per-judge scores, and future debate formats without schema changes.
 
 ## Decision
 
-We will replace the current data model with a speaker-centric architecture where:
+We will keep the existing project concept of `holdings` and translate the BP
+schema into a debate-agnostic core:
 
-**1. The atomic unit is the speaker slot, not the team.**
+- `holdings` remain the organisation/container layer.
+- `sessions` become `events`.
+- `rooms` remain the operational debate instance.
+- `waitlists` and fixed `teams` become `event_participants`.
+- `room_teams` become `room_sides`.
+- `room_speakers` point to event participants instead of users.
+- `rooms.judge` becomes `room_judges`.
+- Inline speaker scores move into `scores`.
 
-A speaker record represents one person giving one speech at a specific side and position in a debate. Every debate format decomposes to an ordered set of speaker slots:
-- BP: 4 sides × 2 positions = 8 slots
-- Australs: 2 sides × 4 positions (3 substantive + 1 reply) = 8 slots
-- Lincoln-Douglas: 2 sides × 1 position = 2 slots
+The core database stores normalized event, room, participant, judging, and score
+data. It does not store JSON format schemes or JSON configuration.
 
-**2. The session carries a scheme (JSONB) that defines the debate format.**
+Debate mechanics live in backend format plugins. The `formats` table stores a
+`method` string that must match a registered backend plugin. Adding a new debate
+format requires a new backend mechanics plugin and a `formats` row, but should
+not require redesigning the core schema.
 
-Instead of Tabbycat's ~100 key-value preference rows per tournament, we store a single JSON document per session that fully describes: sides, positions, scoring rules, adjudication type, and mechanics. All debates in one session must conform to this scheme.
+Only BP is implemented first with method `british-parliamentary`.
 
-A session can be anything — a single practice debate, a club meeting, or a full WUDC tournament.
+## Current-To-New Translation
 
-**3. Person and User are separated.**
+| Current v1 | v2 replacement | Reason |
+|---|---|---|
+| `holdings` | `holdings` | Already means organisation/container. |
+| `sessions` | `events` | A session currently represents an event under a holding. |
+| `waitlists` | `event_participants` | Registration must support users, guests, waitlist, judges, and speakers. |
+| `teams` | participant grouping fields | Participants are registered; teams are optional grouping metadata. |
+| `rooms` | `rooms` | Existing project term for one concrete debate instance. |
+| `rooms.judge` | `room_judges` | Supports chairs, panelists, trainees, and future panels. |
+| `room_teams` | `room_sides` | Stores side placement and rank without assuming a team table. |
+| `room_speakers.user_id` | `room_speakers.event_participant_id` | Speakers may be guests without platform accounts. |
+| `room_speakers.score` | `scores` | Scores become per speaker per judge. |
+| hardcoded BP checks | format plugin | BP mechanics move into `british-parliamentary`. |
+| `motions.session_id` | `motions.event_id` | Motions belong to the event; rooms can reference one. |
 
-A person (name, email, institution) exists independently of a login account. Tab directors can register participants by name without requiring accounts. Users can later claim their person record via self-registration.
+## Project Scheme
 
-**4. Teams are optional.**
+```mermaid
+erDiagram
+    users ||--o{ admins : is
+    users ||--o{ owners : owns
+    users ||--o{ event_participants : claims
 
-Not all formats have teams (Lincoln-Douglas is 1v1). Teams exist as an optional grouping layer — a named set of persons registered to a session. The speaker table is the source of truth for who actually spoke.
+    holdings ||--o{ owners : has
+    holdings ||--o{ events : hosts
 
-**5. Scores are per-speaker per-adjudicator.**
+    formats ||--o{ events : selected_by
 
-This supports both consensus panels (one score set) and voting panels (each judge scores independently). Multi-criteria scoring (Matter/Manner/Method) is handled via a score_details join table.
+    events ||--o{ event_participants : registers
+    events ||--o{ rounds : has
+    events ||--o{ motions : has
 
-### New tables (replacing v1):
+    rounds ||--o{ rooms : contains
+    motions ||--o{ rooms : assigned_to
 
-| New | Replaces | Purpose |
-|-----|----------|---------|
-| persons | _(new)_ | Human identity, independent of auth |
-| users | users | Auth account, links to person |
-| sessions | holdings + sessions | Event container with scheme JSONB |
-| debates | rooms | One matchup within a session |
-| speakers | room_speakers | Atomic unit: person + side + position |
-| scores | _(new)_ | Per-speaker per-adjudicator score |
-| score_details | _(new)_ | Multi-criteria breakdown |
-| debate_sides | room_teams | Aggregate result per side |
-| debate_adjudicators | rooms.judge column | Judge panel support |
-| session_roles | owners + admins | Generic role-based access per session |
-| teams | teams | Optional, session-scoped, variable size |
-| team_members | _(new)_ | Person membership in teams |
-| motions | motions | Per-session with round grouping |
+    rooms ||--o{ room_sides : has
+    rooms ||--o{ room_judges : judged_by
 
-### Format presets:
-
-Only BP is shipped initially. The architecture supports adding other formats (Australs, WSDC, Policy, LD, etc.) later by providing new scheme JSON — no code changes required.
+    room_sides ||--o{ room_speakers : has
+    room_speakers ||--o{ scores : receives
+    room_judges ||--o{ scores : gives
+```
 
 ## Consequences
 
-**What becomes easier:**
-- Supporting new debate formats requires zero code changes — just a new scheme JSON
-- Adjudicator panels, multi-criteria scoring, and reply speeches work out of the box
-- Person/User separation enables paper-entry tournaments and self-registration
-- The scheme JSON is self-describing — frontends can render ballot forms dynamically from it
-- Data is portable: export a session and its scheme together, import elsewhere
+What becomes easier:
+- Guests can register for an event before creating an account.
+- A participant can later claim their event identity with a one-time token.
+- Rooms can support judge panels.
+- Scores are attributable to a specific judge.
+- Future formats can reuse the same core tables.
 
-**What becomes more difficult:**
-- This is a breaking change. All v1 endpoints and tables are replaced.
-- Existing v1 data cannot be auto-migrated (it was test data only).
-- The scheme validation adds a layer of indirection — scores are validated against runtime config, not static constraints.
-- Developers must understand the scheme contract to work with the API.
+What becomes more difficult:
+- Format mechanics move behind plugin boundaries.
+- Controllers must resolve the event format before validating room and score data.
+- Existing v1 test data cannot be automatically migrated cleanly.
 
-**What we chose NOT to do (vs Tabbycat):**
-- No ~100 preference rows per tournament — one JSON document instead
-- No mandatory Team model — teams are optional
-- No separate Round table — rounds are an optional label on debates
-- No adjudicator feedback system (deferred)
-- No break qualification engine (deferred)
-- No draw generation algorithms (deferred)
+What we are not doing now:
+- No JSON format schemes or JSON config stored in the database.
+- No first-class organisation table beyond existing `holdings`.
+- No draw generation, break qualification, or adjudicator feedback engine.
+- No non-BP plugin in the first implementation.
