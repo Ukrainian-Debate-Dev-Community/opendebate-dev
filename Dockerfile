@@ -1,13 +1,13 @@
 # syntax=docker/dockerfile:1.7
 # ---------- Stage 1: deps ----------
-FROM node:22-alpine AS deps
+FROM node:26-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN --mount=type=cache,target=/root/.npm \
   npm ci --omit=dev
 
 # ---------- Stage 2: runtime ----------
-FROM node:22-alpine AS runtime
+FROM node:26-alpine AS runtime
 WORKDIR /app
 ENV NODE_ENV=production PORT=3000
 RUN apk add --no-cache tini=0.19.0-r3
