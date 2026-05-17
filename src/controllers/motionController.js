@@ -1,28 +1,16 @@
-const { Motion, Session, Owner } = require("../models");
+const { Motion, Event, Owner, Organizer } = require("../models");
 const AppError = require("../utils/AppError");
 
 const createMotion = async (req, res, next) => {
   try {
-    const sessionId = req.params.sessionId;
+    const eventId = req.params.eventId;
     const { motion_text, infoslide, is_released } = req.body;
 
-    if (!motion_text) {
+    if (!motion_text)
       throw new AppError("Please provide the motion_text.", 400);
-    }
-
-    // only one motion exists per session
-    const existingMotion = await Motion.findOne({
-      where: { session_id: sessionId },
-    });
-    if (existingMotion) {
-      throw new AppError(
-        "A motion already exists for this session. Please update it instead.",
-        409,
-      );
-    }
 
     const newMotion = await Motion.create({
-      session_id: sessionId,
+      event_id: eventId,
       motion_text,
       infoslide: infoslide || null,
       is_released: is_released || false,
@@ -34,45 +22,96 @@ const createMotion = async (req, res, next) => {
   }
 };
 
-const getMotion = async (req, res, next) => {
+const getMotions = async (req, res, next) => {
   try {
-    const sessionId = req.params.sessionId;
-    const motion = await Motion.findOne({ where: { session_id: sessionId } });
+    const eventId = req.params.eventId;
+    const motions = await Motion.findAll({ where: { event_id: eventId } });
 
-    if (!motion) throw new AppError("No motion found for this session.", 404);
+    if (!motions || motions.length === 0) {
+      throw new AppError("No motions found for this event.", 404);
+    }
 
-    // if it's released => anyone can see it
+    let isAuthorisedViewer = false;
+    if (req.user.isAdmin) {
+      isAuthorisedViewer = true;
+    } else {
+      const event = await Event.findByPk(eventId);
+      if (event) {
+        const isOwner = await Owner.findOne({
+          where: {
+            user_id: req.user.id,
+            organisation_id: event.organisation_id,
+          },
+        });
+        // organizers has the authority as well
+        const isOrganizer = await Organizer.findOne({
+          where: { user_id: req.user.id, event_id: event.id },
+        });
+
+        if (isOwner || isOrganizer) isAuthorisedViewer = true;
+      }
+    }
+
+    const processedMotions = motions.map((motion) => {
+      if (motion.is_released || isAuthorisedViewer) {
+        return motion;
+      }
+      return {
+        id: motion.id,
+        event_id: motion.event_id,
+        motion_text: "Motion will be revealed later.",
+        infoslide: null,
+        is_released: false,
+      };
+    });
+
+    res.status(200).json({ status: "success", data: processedMotions });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getMotionById = async (req, res, next) => {
+  try {
+    const { eventId, motionId } = req.params;
+    const motion = await Motion.findOne({
+      where: { id: motionId, event_id: eventId },
+    });
+
+    if (!motion) throw new AppError("Motion not found.", 404);
+
     if (motion.is_released) {
       return res.status(200).json({ status: "success", data: motion });
     }
 
-    // if it is NOT released => check if the user is an Admin or the Holding Owner
-    let isAuthorizedViewer = false;
-
+    // the same authorisation check as getMotions
+    let isAuthorisedViewer = false;
     if (req.user.isAdmin) {
-      isAuthorizedViewer = true;
+      isAuthorisedViewer = true;
     } else {
-      const session = await Session.findByPk(sessionId);
-      const isOwner = await Owner.findOne({
-        where: { user_id: req.user.id, holding_id: session.holding_id },
-      });
-      if (isOwner) isAuthorizedViewer = true;
+      const event = await Event.findByPk(eventId);
+      if (event) {
+        const isOwner = await Owner.findOne({
+          where: {
+            user_id: req.user.id,
+            organisation_id: event.organisation_id,
+          },
+        });
+        const isOrganizer = await Organizer.findOne({
+          where: { user_id: req.user.id, event_id: event.id },
+        });
+        if (isOwner || isOrganizer) isAuthorisedViewer = true;
+      }
     }
 
-    if (isAuthorizedViewer) {
+    if (isAuthorisedViewer) {
       return res.status(200).json({ status: "success", data: motion });
     }
 
-    // if default User requesting unreleased motion => redact data
-    const redactedMotion = {
-      id: motion.id,
-      session_id: motion.session_id,
-      motion_text: "Motion will be revealed later.",
-      infoslide: null,
-      is_released: false,
-    };
-
-    res.status(200).json({ status: "success", data: redactedMotion });
+    throw new AppError(
+      "You do not have permission to view this unreleased motion.",
+      403,
+    );
   } catch (error) {
     next(error);
   }
@@ -80,10 +119,11 @@ const getMotion = async (req, res, next) => {
 
 const updateMotion = async (req, res, next) => {
   try {
-    const sessionId = req.params.sessionId;
+    // now I will use the direct motionId
+    const { motionId } = req.params;
     const { motion_text, infoslide, is_released } = req.body;
 
-    const motion = await Motion.findOne({ where: { session_id: sessionId } });
+    const motion = await Motion.findByPk(motionId);
     if (!motion) throw new AppError("Motion not found.", 404);
 
     motion.motion_text = motion_text || motion.motion_text;
@@ -100,8 +140,8 @@ const updateMotion = async (req, res, next) => {
 
 const deleteMotion = async (req, res, next) => {
   try {
-    const sessionId = req.params.sessionId;
-    const motion = await Motion.findOne({ where: { session_id: sessionId } });
+    const { motionId } = req.params;
+    const motion = await Motion.findByPk(motionId);
 
     if (!motion) throw new AppError("Motion not found.", 404);
 
@@ -117,7 +157,8 @@ const deleteMotion = async (req, res, next) => {
 
 module.exports = {
   createMotion,
-  getMotion,
+  getMotions,
+  getMotionById,
   updateMotion,
   deleteMotion,
 };
