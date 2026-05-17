@@ -62,6 +62,8 @@ jobs:
   bump-manifest:
     needs: build-and-deploy
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       K8S_REPO: Ukrainian-Debate-Dev-Community/opendebate-k8s
     steps:
