@@ -1,8 +1,5 @@
-# Default: app code reviewed by @DmytroTarasenk0.
-* @DmytroTarasenk0
-
-# CI/CD config — owned by platform maintainer only.
-# Last matching rule wins, so this overrides the * default for these paths.
-/.github/                      @thefirstarcher
-/Dockerfile                    @thefirstarcher
-/.dockerignore                 @thefirstarcher
+*                       @Ukrainian-Debate-Dev-Community/backend
+/.github/               @Ukrainian-Debate-Dev-Community/devops
+/Dockerfile             @Ukrainian-Debate-Dev-Community/devops
+/.dockerignore          @Ukrainian-Debate-Dev-Community/devops
+/docs/                  @Ukrainian-Debate-Dev-Community/docs @Ukrainian-Debate-Dev-Community/backend
