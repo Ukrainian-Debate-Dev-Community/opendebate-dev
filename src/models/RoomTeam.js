@@ -7,14 +7,13 @@ module.exports = (sequelize) => {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
       room_id: { type: DataTypes.INTEGER, allowNull: false },
       team_id: { type: DataTypes.INTEGER, allowNull: false },
-      position: {
-        type: DataTypes.STRING(2),
-        allowNull: false,
-        validate: { isIn: [["OG", "OO", "CG", "CO"]] },
-      },
-      rank: { type: DataTypes.SMALLINT, allowNull: true }, // 1 2 3 4
+      position: { type: DataTypes.SMALLINT, allowNull: false },
+      rank: { type: DataTypes.SMALLINT, allowNull: true },
     },
-    { tableName: "room_teams" },
+    {
+      tableName: "room_teams",
+      indexes: [{ unique: true, fields: ["room_id", "team_id"] }],
+    },
   );
 
   RoomTeam.associate = (models) => {
