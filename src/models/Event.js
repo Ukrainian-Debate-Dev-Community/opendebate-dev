@@ -11,12 +11,12 @@ module.exports = (sequelize) => {
       end_date: { type: DataTypes.DATE, allowNull: true },
       status: {
         type: DataTypes.STRING(20),
-        defaultValue: "draft",
+        defaultValue: "scheduled",
         validate: {
-          isIn: [["draft", "scheduled", "in_progress", "completed"]],
+          isIn: [["scheduled", "in_progress", "completed"]],
         },
       },
-      is_ranked: { type: DataTypes.BOOLEAN, defaultValue: true },
+      is_ranked: { type: DataTypes.BOOLEAN, defaultValue: false },
       is_deleted: { type: DataTypes.BOOLEAN, defaultValue: false },
     },
     { tableName: "events" },

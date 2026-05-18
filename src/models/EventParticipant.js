@@ -13,7 +13,7 @@ module.exports = (sequelize) => {
         allowNull: false,
         validate: { isIn: [["speaker", "adjudicator"]] },
       },
-      is_waitlist: { type: DataTypes.BOOLEAN, defaultValue: false },
+      is_waitlist: { type: DataTypes.BOOLEAN, defaultValue: true },
       claim_token_hash: { type: DataTypes.STRING(255), allowNull: true },
       claim_token_used_at: { type: DataTypes.DATE, allowNull: true },
     },

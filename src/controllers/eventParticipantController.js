@@ -39,7 +39,7 @@ const addParticipant = async (req, res, next) => {
       user_id: user_id || null,
       display_name,
       role,
-      is_waitlist: is_waitlist || false,
+      is_waitlist: is_waitlist || true,
       claim_token_hash: claimTokenHash,
     });
 

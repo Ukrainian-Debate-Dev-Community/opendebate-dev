@@ -101,8 +101,8 @@ module.exports = {
       name: { type: Sequelize.STRING(120), allowNull: false },
       start_date: { type: Sequelize.DATE, allowNull: true },
       end_date: { type: Sequelize.DATE, allowNull: true },
-      status: { type: Sequelize.STRING(20), defaultValue: "draft" },
-      is_ranked: { type: Sequelize.BOOLEAN, defaultValue: true },
+      status: { type: Sequelize.STRING(20), defaultValue: "scheduled" },
+      is_ranked: { type: Sequelize.BOOLEAN, defaultValue: false },
       is_deleted: { type: Sequelize.BOOLEAN, defaultValue: false },
     });
 
