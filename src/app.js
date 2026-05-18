@@ -1,6 +1,7 @@
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
+const rateLimit = require("express-rate-limit");
 require("dotenv").config();
 
 const { sequelize } = require("./models");
@@ -10,6 +11,18 @@ const errorHandler = require("./middleware/errorHandler");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+const apiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 200, // 200 requests per window
+  message: {
+    status: "fail",
+    message:
+      "Too many requests from this IP, please try again after 15 minutes.",
+  },
+  standardHeaders: true, // return rate limit info in the `RateLimit-*` headers
+  legacyHeaders: false, // disable the `X-RateLimit-*` headers
+});
 
 // middleware
 app.use(helmet()); // headers security
@@ -29,7 +42,7 @@ app.get("/readyz", async (_req, res) => {
 });
 
 // routes
-app.use("/api", apiRoutes);
+app.use("/api", apiLimiter, apiRoutes);
 
 // error handler middleware
 app.use(errorHandler);
