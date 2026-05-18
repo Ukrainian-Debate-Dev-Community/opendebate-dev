@@ -1,11 +1,13 @@
 const express = require("express");
 const router = express.Router();
 const adminController = require("../controllers/adminController");
-const { authenticate, restrictTo } = require("../middleware/authMiddleware");
+const {
+  verifyToken,
+  restrictToAdmin,
+} = require("../middleware/authMiddleware");
 
-router.use(authenticate);
+router.use(verifyToken);
 
-// only an Admin can grant another Admin
-router.post("/grant", restrictTo("admin"), adminController.grantAdmin);
+router.post("/grant", restrictToAdmin, adminController.grantAdmin);
 
 module.exports = router;

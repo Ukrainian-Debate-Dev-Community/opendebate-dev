@@ -1,14 +1,14 @@
 const express = require("express");
 const router = express.Router({ mergeParams: true });
 const motionController = require("../controllers/motionController");
-const { restrictTo } = require("../middleware/authMiddleware");
+const { restrictToOwnOrg } = require("../middleware/authMiddleware");
 
-// base path is /sessions/:sessionId/motion
-// anyone can try to fetch the motion
-router.get("/", motionController.getMotion);
+// inherited path /api/events/:eventId/motions
+router.get("/", motionController.getMotions);
+router.get("/:motionId", motionController.getMotionById);
 
-router.post("/", restrictTo("owner"), motionController.createMotion);
-router.put("/", restrictTo("owner"), motionController.updateMotion);
-router.delete("/", restrictTo("owner"), motionController.deleteMotion);
+router.post("/", restrictToOwnOrg, motionController.createMotion);
+router.put("/:motionId", restrictToOwnOrg, motionController.updateMotion);
+router.delete("/:motionId", restrictToOwnOrg, motionController.deleteMotion);
 
 module.exports = router;
