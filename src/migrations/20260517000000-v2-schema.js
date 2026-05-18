@@ -101,7 +101,7 @@ module.exports = {
       name: { type: Sequelize.STRING(120), allowNull: false },
       start_date: { type: Sequelize.DATE, allowNull: true },
       end_date: { type: Sequelize.DATE, allowNull: true },
-      status: { type: Sequelize.STRING(20), defaultValue: "scheduled" },
+      status: { type: Sequelize.STRING(20), defaultValue: "draft" },
       is_ranked: { type: Sequelize.BOOLEAN, defaultValue: true },
       is_deleted: { type: Sequelize.BOOLEAN, defaultValue: false },
     });
@@ -177,32 +177,13 @@ module.exports = {
     // Teams
     await queryInterface.createTable("teams", {
       id: { type: Sequelize.INTEGER, primaryKey: true, autoIncrement: true },
-      event_id: {
-        type: Sequelize.INTEGER,
-        allowNull: true,
-        references: { model: "events", key: "id" },
-        onDelete: "CASCADE",
-      },
       round_id: {
         type: Sequelize.INTEGER,
-        allowNull: true,
+        allowNull: false,
         references: { model: "rounds", key: "id" },
         onDelete: "CASCADE",
       },
       name: { type: Sequelize.STRING(120), allowNull: false },
-    });
-
-    // team belongs to at least one scope
-    await queryInterface.addConstraint("teams", {
-      fields: ["event_id", "round_id"],
-      type: "check",
-      where: {
-        [Sequelize.Op.or]: [
-          { event_id: { [Sequelize.Op.ne]: null } },
-          { round_id: { [Sequelize.Op.ne]: null } },
-        ],
-      },
-      name: "teams_scope_check",
     });
 
     // Team Members

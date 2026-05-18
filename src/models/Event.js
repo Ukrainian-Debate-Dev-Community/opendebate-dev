@@ -11,9 +11,9 @@ module.exports = (sequelize) => {
       end_date: { type: DataTypes.DATE, allowNull: true },
       status: {
         type: DataTypes.STRING(20),
-        defaultValue: "scheduled",
+        defaultValue: "draft",
         validate: {
-          isIn: [["scheduled", "in_progress", "completed"]],
+          isIn: [["draft", "scheduled", "in_progress", "completed"]],
         },
       },
       is_ranked: { type: DataTypes.BOOLEAN, defaultValue: true },
@@ -36,7 +36,6 @@ module.exports = (sequelize) => {
       foreignKey: "event_id",
       onDelete: "CASCADE",
     });
-    Event.hasMany(models.Team, { foreignKey: "event_id", onDelete: "CASCADE" });
     Event.belongsToMany(models.User, {
       through: models.Organizer,
       as: "Organizers",

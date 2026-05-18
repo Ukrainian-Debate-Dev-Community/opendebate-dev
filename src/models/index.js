@@ -14,22 +14,16 @@ const sequelize = new Sequelize({
 
 const models = {
   User: require("./User")(sequelize),
-  Admin: require("./Admin")(sequelize),
-  Organisation: require("./Organisation")(sequelize),
-  Owner: require("./Owner")(sequelize),
-  Format: require("./Format")(sequelize),
-  Event: require("./Event")(sequelize),
-  Organizer: require("./Organizer")(sequelize),
-  EventParticipant: require("./EventParticipant")(sequelize),
-  Round: require("./Round")(sequelize),
+  Holding: require("./Holding")(sequelize),
+  Session: require("./Session")(sequelize),
   Motion: require("./Motion")(sequelize),
-  Team: require("./Team")(sequelize),
-  TeamMember: require("./TeamMember")(sequelize),
   Room: require("./Room")(sequelize),
+  Team: require("./Team")(sequelize),
+  Admin: require("./Admin")(sequelize),
+  Owner: require("./Owner")(sequelize),
+  Waitlist: require("./Waitlist")(sequelize),
   RoomTeam: require("./RoomTeam")(sequelize),
-  RoomAdjudicator: require("./RoomAdjudicator")(sequelize),
   RoomSpeaker: require("./RoomSpeaker")(sequelize),
-  Score: require("./Score")(sequelize),
 };
 
 Object.values(models).forEach((model) => {
