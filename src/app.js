@@ -16,6 +16,18 @@ app.use(helmet()); // headers security
 app.use(cors()); // cross-origin requests
 app.use(express.json()); // json parse
 
+// kubelet probes — mounted at root so the Gateway HTTPRoute (/api/*) keeps them off the public path
+app.get("/healthz", (_req, res) => res.status(200).json({ status: "ok" }));
+
+app.get("/readyz", async (_req, res) => {
+  try {
+    await sequelize.authenticate();
+    res.status(200).json({ status: "ready" });
+  } catch {
+    res.status(503).json({ status: "not_ready" });
+  }
+});
+
 // routes
 app.use("/api", apiRoutes);
 
