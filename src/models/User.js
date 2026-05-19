@@ -26,36 +26,23 @@ module.exports = (sequelize) => {
   User.associate = (models) => {
     // cascade role deletion (admin, owner, waitlist)
     User.hasOne(models.Admin, { foreignKey: "user_id", onDelete: "CASCADE" });
-    User.belongsToMany(models.Holding, {
+    User.belongsToMany(models.Organisation, {
       through: models.Owner,
-      as: "OwnedHoldings",
+      as: "OwnedOrganisations",
       foreignKey: "user_id",
-      otherKey: "holding_id",
+      otherKey: "organisation_id",
       onDelete: "CASCADE",
     });
-    User.belongsToMany(models.Session, {
-      through: models.Waitlist,
-      as: "WaitlistedSessions",
+    User.belongsToMany(models.Event, {
+      through: models.Organizer,
+      as: "OrganizedEvents",
       foreignKey: "user_id",
-      otherKey: "session_id",
+      otherKey: "event_id",
       onDelete: "CASCADE",
     });
-
-    // forbid hard-deletion if the user is tied to historical game data (judge, team-player/speaker)
-    User.hasMany(models.Room, { foreignKey: "judge", onDelete: "NO ACTION" });
-    User.hasMany(models.Team, {
-      as: "OpenedTeams",
-      foreignKey: "opener",
-      onDelete: "NO ACTION",
-    });
-    User.hasMany(models.Team, {
-      as: "ClosedTeams",
-      foreignKey: "closer",
-      onDelete: "NO ACTION",
-    });
-    User.hasMany(models.RoomSpeaker, {
+    User.hasMany(models.EventParticipant, {
       foreignKey: "user_id",
-      onDelete: "NO ACTION",
+      onDelete: "SET NULL", // will become "guest"
     });
   };
 

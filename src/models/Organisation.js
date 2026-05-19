@@ -1,8 +1,8 @@
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-  const Holding = sequelize.define(
-    "Holding",
+  const Organisation = sequelize.define(
+    "Organisation",
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
       name: { type: DataTypes.STRING(120), allowNull: false },
@@ -19,22 +19,23 @@ module.exports = (sequelize) => {
       online: { type: DataTypes.BOOLEAN, defaultValue: false },
       link: { type: DataTypes.STRING(255), allowNull: true },
       created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
+      is_deleted: { type: DataTypes.BOOLEAN, defaultValue: false },
     },
-    { tableName: "holdings" },
+    { tableName: "organisations" },
   );
 
-  Holding.associate = (models) => {
-    Holding.belongsToMany(models.User, {
+  Organisation.associate = (models) => {
+    Organisation.belongsToMany(models.User, {
       through: models.Owner,
       as: "Owners",
-      foreignKey: "holding_id",
+      foreignKey: "organisation_id",
       otherKey: "user_id",
     });
-    Holding.hasMany(models.Session, {
-      foreignKey: "holding_id",
-      onDelete: "NO ACTION",
-    }); // don't delete club events
+    Organisation.hasMany(models.Event, {
+      foreignKey: "organisation_id",
+      onDelete: "CASCADE",
+    });
   };
 
-  return Holding;
+  return Organisation;
 };

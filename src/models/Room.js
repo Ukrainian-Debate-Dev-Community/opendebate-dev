@@ -5,21 +5,29 @@ module.exports = (sequelize) => {
     "Room",
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-      session_id: { type: DataTypes.INTEGER, allowNull: false },
-      judge: { type: DataTypes.INTEGER, allowNull: true },
+      round_id: { type: DataTypes.INTEGER, allowNull: false },
+      format_id: { type: DataTypes.INTEGER, allowNull: false },
+      motion_id: { type: DataTypes.INTEGER, allowNull: true },
       status: {
         type: DataTypes.STRING(20),
-        defaultValue: "scheduled",
-        validate: { isIn: [["scheduled", "finished"]] },
+        defaultValue: "pending",
+        validate: {
+          isIn: [["pending", "live", "judging", "completed", "void"]],
+        },
       },
     },
     { tableName: "rooms" },
   );
 
   Room.associate = (models) => {
-    Room.belongsTo(models.Session, { foreignKey: "session_id" });
-    Room.belongsTo(models.User, { as: "JudgeData", foreignKey: "judge" });
+    Room.belongsTo(models.Round, { foreignKey: "round_id" });
+    Room.belongsTo(models.Format, { foreignKey: "format_id" });
+    Room.belongsTo(models.Motion, { foreignKey: "motion_id" });
     Room.hasMany(models.RoomTeam, {
+      foreignKey: "room_id",
+      onDelete: "CASCADE",
+    });
+    Room.hasMany(models.RoomAdjudicator, {
       foreignKey: "room_id",
       onDelete: "CASCADE",
     });

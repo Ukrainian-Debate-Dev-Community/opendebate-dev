@@ -2,19 +2,25 @@ const express = require("express");
 const router = express.Router();
 const userController = require("../controllers/userController");
 const statsController = require("../controllers/statsController");
-const { authenticate } = require("../middleware/authMiddleware");
+const participantController = require("../controllers/eventParticipantController");
+const { verifyToken } = require("../middleware/authMiddleware");
 
-// anyone can register an account (or login)
+// public
 router.post("/register", userController.createUser);
 router.post("/login", userController.login);
 
-router.use(authenticate);
+router.use(verifyToken);
 
 // self-management
 router.put("/password", userController.updatePassword);
 router.put("/username", userController.updateUsername);
 router.delete("/", userController.deleteUser);
 
+// stats and identity
 router.get("/:id/stats", statsController.getUserStats);
+router.post(
+  "/claim-participant/:participantId",
+  participantController.claimIdentity,
+);
 
 module.exports = router;

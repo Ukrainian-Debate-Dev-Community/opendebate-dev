@@ -1,20 +1,17 @@
 const express = require("express");
-const router = express.Router({ mergeParams: true });
+const router = express.Router();
 const roomController = require("../controllers/roomController");
 const scoreController = require("../controllers/scoreController");
-const { restrictTo } = require("../middleware/authMiddleware");
+const {
+  verifyToken,
+  restrictToOwnOrg,
+  restrictToChair,
+} = require("../middleware/authMiddleware");
 
-// base path is /sessions/:sessionId/rooms
-router.get("/", roomController.getSessionRooms);
-router.post("/", restrictTo("owner"), roomController.createRoom);
-router.delete("/:roomId", restrictTo("owner"), roomController.deleteRoom);
+router.use(verifyToken);
 
-// score-routing fits here since I need roomId to close it
-// only the assigned Judge (or Owner) can submit score
-router.put(
-  "/:roomId/scores",
-  restrictTo("judge"),
-  scoreController.submitScores,
-);
+// inherited path /api/rooms/:roomId
+router.delete("/:roomId", restrictToOwnOrg, roomController.deleteRoom);
+router.post("/:roomId/scores", restrictToChair, scoreController.submitScores);
 
 module.exports = router;

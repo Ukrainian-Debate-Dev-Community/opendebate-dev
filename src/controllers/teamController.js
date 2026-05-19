@@ -1,226 +1,270 @@
-const { Team, Waitlist, User, Session } = require("../models");
+const {
+  Team,
+  TeamMember,
+  EventParticipant,
+  Round,
+  Room,
+  RoomSpeaker,
+  RoomTeam,
+  sequelize,
+} = require("../models");
 const AppError = require("../utils/AppError");
-const { Op } = require("sequelize");
 
-// helper that checks if users are already in a team for the session
-const checkExistingTeams = async (sessionId, userIds) => {
-  const existingTeam = await Team.findOne({
-    where: {
-      session_id: sessionId,
-      [Op.or]: [
-        { opener: { [Op.in]: userIds } },
-        { closer: { [Op.in]: userIds } },
-      ],
-    },
-  });
-  if (existingTeam) {
-    throw new AppError(
-      "One or both users are already in a team for this session.",
-      409,
-    );
-  }
-};
-
-// a user registers with a friend
-const registerTeam = async (req, res, next) => {
+const createTeam = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
   try {
-    const sessionId = req.params.sessionId;
-    const { partner_id } = req.body; // friend id
-    const senderId = req.user.id;
+    const roundId = req.params.roundId;
+    const { name, participant_ids } = req.body;
+    // participant_ids expects an ordered array [first_id, second_id ... ], could be duplicates
 
-    if (!partner_id) {
+    if (
+      !name ||
+      !participant_ids ||
+      !Array.isArray(participant_ids) ||
+      participant_ids.length === 0
+    ) {
       throw new AppError(
-        "You must provide a partner_id to register a team.",
+        "Please provide a team name and an array of participant IDs.",
         400,
       );
     }
 
-    if (senderId === partner_id) {
-      throw new AppError("You cannot partner with yourself.", 400);
+    const round = await Round.findByPk(roundId);
+    if (!round) throw new AppError("Round not found.", 404);
+
+    // none of these participants are already in a team
+    const existingMemberships = await TeamMember.findAll({
+      where: { participant_id: participant_ids },
+      include: [
+        {
+          model: Team,
+          required: true,
+          where: { round_id: roundId },
+        },
+      ],
+      transaction,
+    });
+
+    if (existingMemberships.length > 0) {
+      throw new AppError(
+        "One or more participants are already assigned to a team in this round.",
+        409,
+      );
     }
 
-    const userIds = [senderId, partner_id].filter((id) => id != null);
+    const newTeam = await Team.create(
+      { round_id: roundId, name },
+      { transaction },
+    );
 
-    // ensure neither user is already in a team
-    await checkExistingTeams(sessionId, userIds);
+    // map Participants to TeamMembers with their speaking order
+    const membersToInsert = participant_ids.map((id, index) => ({
+      team_id: newTeam.id,
+      participant_id: id,
+      speaker_order: index + 1,
+    }));
 
-    const newTeam = await Team.create({
-      session_id: sessionId,
-      opener: senderId,
-      closer: partner_id,
-    });
+    await TeamMember.bulkCreate(membersToInsert, { transaction });
 
-    // remove them from the waitlist if they were on it
-    await Waitlist.destroy({
-      where: {
-        session_id: sessionId,
-        user_id: { [Op.in]: userIds },
-      },
-    });
-
+    await transaction.commit();
     res.status(201).json({ status: "success", data: newTeam });
   } catch (error) {
+    await transaction.rollback();
     next(error);
   }
 };
 
-// Owner manually pairs two users
-const createTeam = async (req, res, next) => {
+const getRoundTeams = async (req, res, next) => {
   try {
-    const sessionId = req.params.sessionId;
-    const { opener, closer } = req.body; // IDs of the two users
-
-    if (!opener || !closer) {
-      throw new AppError("A team must have exactly two players.", 400);
-    }
-
-    // now the judge can assign the ironman (opener and closer share the same id)
-
-    const userIds = [opener, closer].filter((id) => id != null);
-
-    // ensure neither user is already in a team
-    await checkExistingTeams(sessionId, userIds);
-
-    const newTeam = await Team.create({
-      session_id: sessionId,
-      opener: opener,
-      closer: closer,
-    });
-
-    // remove them from the waitlist if they were on it
-    await Waitlist.destroy({
-      where: {
-        session_id: sessionId,
-        user_id: { [Op.in]: userIds },
-      },
-    });
-
-    res.status(201).json({ status: "success", data: newTeam });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// now everyone can fetch all teams for the Session
-const getSessionTeams = async (req, res, next) => {
-  try {
-    const sessionId = req.params.sessionId;
-
-    // fetch the session just to get its name for the response
-    const session = await Session.findByPk(sessionId, {
-      attributes: ["id", "name"],
-    });
-    if (!session) throw new AppError("Session not found.", 404);
+    const roundId = req.params.roundId;
 
     const teams = await Team.findAll({
-      where: { session_id: sessionId },
-      attributes: ["id"],
+      where: { round_id: roundId },
       include: [
-        { model: User, as: "OpenerData", attributes: ["id", "username"] },
-        { model: User, as: "CloserData", attributes: ["id", "username"] },
+        {
+          model: TeamMember,
+          attributes: ["id", "speaker_order"],
+          include: [
+            {
+              model: EventParticipant,
+              attributes: ["id", "display_name", "user_id"],
+            },
+          ],
+        },
+      ],
+      order: [
+        ["id", "ASC"],
+        [TeamMember, "speaker_order", "ASC"],
       ],
     });
 
-    res
-      .status(200)
-      .json({ status: "success", data: { session: session, teams: teams } });
+    // clean the payload
+    const formattedTeams = teams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      speakers: team.TeamMembers.map((member) => ({
+        participant_id: member.EventParticipant.id,
+        name: member.EventParticipant.display_name,
+        user_id: member.EventParticipant.user_id,
+        order: member.speaker_order,
+      })),
+    }));
+
+    res.status(200).json({ status: "success", data: formattedTeams });
   } catch (error) {
     next(error);
   }
 };
 
-// owner replaces a player or swaps roles
 const updateTeam = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
   try {
-    const { opener, closer } = req.body;
-    const team = await Team.findByPk(req.params.teamId);
+    const teamId = req.params.teamId;
+    const { name, participant_ids } = req.body;
+
+    const team = await Team.findByPk(teamId, {
+      include: [TeamMember],
+      transaction,
+    });
 
     if (!team) throw new AppError("Team not found.", 404);
 
-    const newUserIds = [opener, closer].filter((id) => id != null);
+    const roundId = team.round_id;
 
-    // check if the NEW players are already in another team
-    const existingTeam = await Team.findOne({
-      where: {
-        session_id: team.session_id,
-        id: { [Op.ne]: team.id }, // (exclude the current team's ID)
-        [Op.or]: [
-          { opener: { [Op.in]: newUserIds } },
-          { closer: { [Op.in]: newUserIds } },
-        ],
-      },
+    const existingMemberships = await TeamMember.findAll({
+      where: { participant_id: participant_ids },
+      include: [
+        {
+          model: Team,
+          required: true,
+          where: { round_id: roundId },
+        },
+      ],
+      transaction,
     });
 
-    if (existingTeam)
+    if (existingMemberships.length > 0) {
       throw new AppError(
-        "One of these users is already in a different team.",
+        "One or more participants are already assigned to a team in this round.",
         409,
       );
-
-    // identify who is being removed from the team => put them back on the waitlist
-    const oldUsers = [team.opener, team.closer].filter((id) => id != null);
-    const removedUsers = oldUsers.filter((id) => !newUserIds.includes(id));
-
-    // update the team
-    team.opener = opener || null;
-    team.closer = closer || null;
-    await team.save();
-
-    // remove the NEW players from the waitlist
-    if (newUserIds.length > 0) {
-      await Waitlist.destroy({
-        where: {
-          session_id: team.session_id,
-          user_id: { [Op.in]: newUserIds },
-        },
-      });
     }
 
-    // and put the REMOVED players back on the waitlist safely
-    for (const userId of removedUsers) {
-      await Waitlist.findOrCreate({
-        where: { session_id: team.session_id, user_id: userId },
+    if (name) team.name = name;
+
+    if (participant_ids && Array.isArray(participant_ids)) {
+      // is the team in an active/finished room
+      const roomTeams = await RoomTeam.findAll({
+        where: { team_id: teamId },
+        transaction,
       });
+
+      for (const rt of roomTeams) {
+        const room = await Room.findByPk(rt.room_id, { transaction });
+        if (room && (room.status === "judging" || room.status === "finished")) {
+          throw new AppError(
+            "Cannot modify team roster. This team is in a room that is currently being judged or is already finished.",
+            400,
+          );
+        }
+      }
+
+      const oldParticipantIds = team.TeamMembers.map((tm) => tm.participant_id);
+
+      // clear old TeamMembers and bulk create new ones
+      await TeamMember.destroy({ where: { team_id: teamId }, transaction });
+
+      const membersToInsert = participant_ids.map((id, index) => ({
+        team_id: teamId,
+        participant_id: id,
+        speaker_order: index + 1,
+      }));
+      await TeamMember.bulkCreate(membersToInsert, { transaction });
+
+      // witlist management
+      const removedIds = oldParticipantIds.filter(
+        (id) => !participant_ids.includes(id),
+      );
+
+      if (removedIds.length > 0) {
+        // removed return to waitlist
+        await EventParticipant.update(
+          { is_waitlist: true },
+          { where: { id: removedIds }, transaction },
+        );
+      }
+      if (participant_ids.length > 0) {
+        // new members are removed from waitlist
+        await EventParticipant.update(
+          { is_waitlist: false },
+          { where: { id: participant_ids }, transaction },
+        );
+      }
+
+      // delete Speakers and create the new ones
+      for (const rt of roomTeams) {
+        await RoomSpeaker.destroy({
+          where: { room_team_id: rt.id },
+          transaction,
+        });
+
+        const speakersToCreate = participant_ids.map((id, index) => ({
+          room_team_id: rt.id,
+          participant_id: id,
+          speech_position: index + 1,
+        }));
+        await RoomSpeaker.bulkCreate(speakersToCreate, { transaction });
+      }
     }
 
-    res.status(200).json({ status: "success", data: team });
-  } catch (error) {
-    next(error);
-  }
-};
-
-// Owner dissolves a team (disband)
-const deleteTeam = async (req, res, next) => {
-  try {
-    const team = await Team.findByPk(req.params.teamId);
-    if (!team) throw new AppError("Team not found.", 404);
-
-    const usersToWaitlist = [team.opener, team.closer].filter(
-      (id) => id != null,
-    );
-
-    await team.destroy();
-
-    // return the players to the waitlist
-    for (const userId of usersToWaitlist) {
-      await Waitlist.findOrCreate({
-        where: { session_id: team.session_id, user_id: userId },
-      });
-    }
-
+    await team.save({ transaction });
+    await transaction.commit();
     res.status(200).json({
       status: "success",
-      message: "Team dissolved. Players returned to the waitlist.",
+      message: "Team roster updated successfully.",
     });
   } catch (error) {
+    await transaction.rollback();
     next(error);
   }
 };
 
-module.exports = {
-  registerTeam,
-  createTeam,
-  getSessionTeams,
-  updateTeam,
-  deleteTeam,
+const deleteTeam = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+  try {
+    const teamId = req.params.teamId;
+
+    const team = await Team.findByPk(teamId, {
+      include: [TeamMember],
+      transaction,
+    });
+
+    if (!team) throw new AppError("Team not found.", 404);
+
+    // players to return to the waitlist pool
+    const participantIds = team.TeamMembers.map((tm) => tm.participant_id);
+
+    // disand the team
+    await team.destroy({ transaction });
+
+    // return to waitlist
+    if (participantIds.length > 0) {
+      await EventParticipant.update(
+        { is_waitlist: true },
+        { where: { id: participantIds }, transaction },
+      );
+    }
+
+    await transaction.commit();
+    res.status(200).json({
+      status: "success",
+      message:
+        "Team dissolved successfully. Participants returned to the available pool.",
+    });
+  } catch (error) {
+    await transaction.rollback();
+    next(error);
+  }
 };
+
+module.exports = { createTeam, getRoundTeams, updateTeam, deleteTeam };
