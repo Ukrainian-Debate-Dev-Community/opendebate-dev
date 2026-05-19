@@ -1,7 +1,7 @@
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-  return sequelize.define(
+  const Organizer = sequelize.define(
     "Organizer",
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
@@ -11,4 +11,11 @@ module.exports = (sequelize) => {
     },
     { tableName: "organizers" },
   );
+
+  Organizer.associate = (models) => {
+    Organizer.belongsTo(models.User, { foreignKey: "user_id" });
+    Organizer.belongsTo(models.Event, { foreignKey: "event_id" });
+  };
+
+  return Organizer;
 };

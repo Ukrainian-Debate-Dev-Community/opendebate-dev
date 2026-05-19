@@ -67,27 +67,39 @@ const submitScores = async (req, res, next) => {
     }
     const roomAdjudicatorId = adjudicatorRecord.id;
 
-    // update Room Team Rankings and build a map
-    const teamRankMap = new Map();
-
+    // update Team Rankings and force Speaker inheritance
     for (const teamData of teamRankings) {
       const roomTeam = await RoomTeam.findByPk(teamData.room_team_id, {
+        include: [RoomSpeaker],
         transaction,
       });
+
       if (!roomTeam || roomTeam.room_id !== room.id) {
         throw new AppError(
           `Invalid room_team_id: ${teamData.room_team_id}`,
           400,
         );
       }
+
       roomTeam.rank = teamData.rank;
       await roomTeam.save({ transaction });
 
-      // store the rank in memory for the speakers to inherit
-      teamRankMap.set(roomTeam.id, teamData.rank);
+      // apply the rank to the speakers
+      for (const speaker of roomTeam.RoomSpeakers) {
+        speaker.rank = teamData.rank;
+        await speaker.save({ transaction });
+      }
     }
 
-    // wipe any existing scores from this adjudicator (just in case of any drafts or anything)
+    // validate complete ballot
+    const expectedSpeakers = format.teams_per_room * format.speakers_per_team;
+    if (speakerScores.length !== expectedSpeakers) {
+      throw new AppError(
+        `Incomplete ballot. Format ${format.code} requires exactly ${expectedSpeakers} speaker scores. You provided ${speakerScores.length}.`,
+        400,
+      );
+    }
+
     await Score.destroy({
       where: { room_adjudicator_id: roomAdjudicatorId },
       transaction,
@@ -95,7 +107,7 @@ const submitScores = async (req, res, next) => {
 
     const scoresToInsert = [];
 
-    // update Room Speakers Ranking and process scores
+    // process scores
     for (const sp of speakerScores) {
       // format boundary validation
       if (sp.score < format.score_min || sp.score > format.score_max) {
@@ -103,20 +115,6 @@ const submitScores = async (req, res, next) => {
           `Score ${sp.score} is out of bounds for format ${format.code} (${format.score_min}-${format.score_max}).`,
           400,
         );
-      }
-
-      const roomSpeaker = await RoomSpeaker.findByPk(sp.room_speaker_id, {
-        transaction,
-      });
-      if (!roomSpeaker) {
-        throw new AppError(`RoomSpeaker ${sp.room_speaker_id} not found.`, 404);
-      }
-
-      // inherit the rank
-      const inheritedRank = teamRankMap.get(roomSpeaker.room_team_id);
-      if (inheritedRank !== undefined) {
-        roomSpeaker.rank = inheritedRank;
-        await roomSpeaker.save({ transaction });
       }
 
       // Score row

@@ -3,6 +3,9 @@ const {
   User,
   Admin,
   Event,
+  Room,
+  Round,
+  Team,
   Owner,
   Organizer,
   RoomAdjudicator,
@@ -67,10 +70,32 @@ const restrictToAdmin = (req, res, next) => {
 // Owners and Organisers
 const restrictToOwnOrg = async (req, res, next) => {
   try {
-    const eventId = req.params.eventId;
+    let eventId = req.params.eventId;
     const userId = req.user.id;
 
     if (req.user.isAdmin) return next();
+
+    // climb up to find the event (room-round routing case)
+    if (req.params.roomId) {
+      const room = await Room.findByPk(req.params.roomId, { include: [Round] });
+      if (!room) throw new AppError("Room not found.", 404);
+      eventId = room.Round.event_id;
+    } else if (req.params.teamId) {
+      const team = await Team.findByPk(req.params.teamId, { include: [Round] });
+      if (!team) throw new AppError("Team not found.", 404);
+      eventId = team.Round.event_id;
+    } else if (req.params.roundId) {
+      const round = await Round.findByPk(req.params.roundId);
+      if (!round) throw new AppError("Round not found.", 404);
+      eventId = round.event_id;
+    }
+
+    if (!eventId) {
+      throw new AppError(
+        "Could not determine the Event context for this route.",
+        400,
+      );
+    }
 
     const event = await Event.findByPk(eventId);
     if (!event) throw new AppError("Event not found.", 404);

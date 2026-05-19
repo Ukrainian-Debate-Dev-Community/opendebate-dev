@@ -30,6 +30,49 @@ const createRoom = async (req, res, next) => {
     const format = await Format.findByPk(format_id, { transaction });
     if (!format) throw new AppError("Format not found.", 404);
 
+    const teamIds = teams.map((t) => t.team_id);
+    const adjudicatorIds = adjudicators.map((adj) => adj.participant_id);
+
+    // check for double-booked Teams
+    const existingRoomTeams = await RoomTeam.findAll({
+      where: { team_id: teamIds },
+      include: [
+        {
+          model: Room,
+          required: true,
+          where: { round_id: roundId },
+        },
+      ],
+      transaction,
+    });
+
+    if (existingRoomTeams.length > 0) {
+      throw new AppError(
+        "One or more teams are already assigned to a room in this round.",
+        409,
+      );
+    }
+
+    // check for double-booked Adjudicators
+    const existingAdjudicators = await RoomAdjudicator.findAll({
+      where: { participant_id: adjudicatorIds },
+      include: [
+        {
+          model: Room,
+          required: true,
+          where: { round_id: roundId },
+        },
+      ],
+      transaction,
+    });
+
+    if (existingAdjudicators.length > 0) {
+      throw new AppError(
+        "One or more adjudicators are already assigned to a room in this round.",
+        409,
+      );
+    }
+
     // format validation
     if (teams.length !== format.teams_per_room) {
       throw new AppError(

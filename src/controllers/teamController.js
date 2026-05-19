@@ -98,7 +98,19 @@ const getRoundTeams = async (req, res, next) => {
       ],
     });
 
-    res.status(200).json({ status: "success", data: teams });
+    // clean the payload
+    const formattedTeams = teams.map((team) => ({
+      id: team.id,
+      name: team.name,
+      speakers: team.TeamMembers.map((member) => ({
+        participant_id: member.EventParticipant.id,
+        name: member.EventParticipant.display_name,
+        user_id: member.EventParticipant.user_id,
+        order: member.speaker_order,
+      })),
+    }));
+
+    res.status(200).json({ status: "success", data: formattedTeams });
   } catch (error) {
     next(error);
   }
@@ -116,6 +128,27 @@ const updateTeam = async (req, res, next) => {
     });
 
     if (!team) throw new AppError("Team not found.", 404);
+
+    const roundId = team.round_id;
+
+    const existingMemberships = await TeamMember.findAll({
+      where: { participant_id: participant_ids },
+      include: [
+        {
+          model: Team,
+          required: true,
+          where: { round_id: roundId },
+        },
+      ],
+      transaction,
+    });
+
+    if (existingMemberships.length > 0) {
+      throw new AppError(
+        "One or more participants are already assigned to a team in this round.",
+        409,
+      );
+    }
 
     if (name) team.name = name;
 

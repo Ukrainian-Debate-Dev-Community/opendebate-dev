@@ -30,7 +30,7 @@ const createOrganisation = async (req, res, next) => {
 
     const newOrganisation = await Organisation.create({
       name,
-      type: type || "academic",
+      type: type || "personal",
       online: online || false,
       link: link || null,
     });

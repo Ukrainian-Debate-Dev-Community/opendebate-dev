@@ -9,12 +9,14 @@ const {
 // child routers
 const motionRoutes = require("./motionRoutes");
 const participantRoutes = require("./eventParticipantRoutes");
+const organizerRoutes = require("./organizerRoutes");
 
 router.use(verifyToken);
 
 // pass the eventId down
 router.use("/:eventId/motions", motionRoutes);
 router.use("/:eventId/participants", participantRoutes);
+router.use("/:eventId/organizers", organizerRoutes);
 
 // event CRUD
 router.get(
