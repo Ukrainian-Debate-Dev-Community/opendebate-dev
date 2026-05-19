@@ -10,11 +10,19 @@ name: Publish Docker image
 "on":
   push:
     branches: [main]
+  pull_request:
+    types: [opened, labeled, synchronize, reopened]
 concurrency:
   group: deploy-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   build-and-deploy:
+    if: >-
+      github.event_name == 'push'
+      || (github.event.action == 'labeled'
+          && github.event.label.name == 'preview')
+      || (github.event.action != 'labeled'
+          && contains(github.event.pull_request.labels.*.name, 'preview'))
     runs-on: ubuntu-latest
     permissions:
       packages: write
@@ -49,10 +57,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          provenance: mode=max
-          sbom: true
+          provenance: ${{ github.event_name == 'push' && 'mode=max' || 'false' }}
+          sbom: ${{ github.event_name == 'push' }}
       - name: Generate artifact attestation
-        if: ${{ !env.ACT }}
+        if: ${{ !env.ACT && github.event_name == 'push' }}
         uses: actions/attest-build-provenance@v4
         with:
           subject-name: ghcr.io/${{ github.repository_owner }}/opendebate-api
@@ -61,6 +69,7 @@ jobs:
 
   bump-manifest:
     needs: build-and-deploy
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: read
