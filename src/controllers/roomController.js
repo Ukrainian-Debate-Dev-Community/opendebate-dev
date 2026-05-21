@@ -245,15 +245,30 @@ const getRoundRooms = async (req, res, next) => {
 };
 
 const deleteRoom = async (req, res, next) => {
+  // lock the room row and refuse deletion if it's mid-ballot, so a
+  // delete can't race a chair's submission and orphan scores.
+  const transaction = await sequelize.transaction();
   try {
-    const room = await Room.findByPk(req.params.roomId);
+    const room = await Room.findByPk(req.params.roomId, {
+      lock: transaction.LOCK.UPDATE,
+      transaction,
+    });
     if (!room) throw new AppError("Room not found.", 404);
 
-    await room.destroy();
+    if (room.status === "judging" || room.status === "completed") {
+      throw new AppError(
+        `Cannot delete a room in '${room.status}' state. Void or reset it first.`,
+        409,
+      );
+    }
+
+    await room.destroy({ transaction });
+    await transaction.commit();
     res
       .status(200)
       .json({ status: "success", message: "Room deleted successfully." });
   } catch (error) {
+    await transaction.rollback();
     next(error);
   }
 };

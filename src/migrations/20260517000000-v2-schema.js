@@ -172,6 +172,7 @@ module.exports = {
       motion_text: { type: Sequelize.TEXT, allowNull: false },
       infoslide: { type: Sequelize.TEXT, allowNull: true },
       is_released: { type: Sequelize.BOOLEAN, defaultValue: false },
+      is_deleted: { type: Sequelize.BOOLEAN, defaultValue: false },
     });
 
     // Teams

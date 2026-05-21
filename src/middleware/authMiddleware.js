@@ -5,6 +5,7 @@ const {
   Room,
   Round,
   Team,
+  Motion,
   Owner,
   Organizer,
   RoomAdjudicator,
@@ -40,7 +41,7 @@ const verifyToken = async (req, res, next) => {
       );
     }
 
-    // H1: trust the `isAdmin` claim from the token; admin grant/revoke must re-issue.
+    // trust the `isAdmin` claim from the token; admin grant/revoke must re-issue.
     req.user = currentUser;
     req.user.isAdmin = !!decoded.isAdmin;
 
@@ -69,15 +70,83 @@ const restrictToAdmin = (req, res, next) => {
   next();
 };
 
+// shared resolver — walks the available route params to the owning event.
+// Memoised on `req` so a request that passes through multiple guards only pays once.
+const resolveEventId = async (req) => {
+  if (req._resolvedEventId !== undefined) return req._resolvedEventId;
+
+  let eventId = req.params.eventId ? Number(req.params.eventId) : null;
+
+  if (!eventId && req.params.roomId) {
+    const room = await Room.findByPk(req.params.roomId, { include: [Round] });
+    if (!room) throw new AppError("Room not found.", 404);
+    eventId = room.Round.event_id;
+  } else if (!eventId && req.params.teamId) {
+    const team = await Team.findByPk(req.params.teamId, { include: [Round] });
+    if (!team) throw new AppError("Team not found.", 404);
+    eventId = team.Round.event_id;
+  } else if (!eventId && req.params.roundId) {
+    const round = await Round.findByPk(req.params.roundId);
+    if (!round) throw new AppError("Round not found.", 404);
+    eventId = round.event_id;
+  } else if (!eventId && req.params.motionId) {
+    const motion = await Motion.findByPk(req.params.motionId);
+    if (!motion) throw new AppError("Motion not found.", 404);
+    eventId = motion.event_id;
+  } else if (!eventId && req.params.participantId) {
+    const participant = await EventParticipant.findByPk(
+      req.params.participantId,
+    );
+    if (!participant) throw new AppError("Participant not found.", 404);
+    eventId = participant.event_id;
+  } else if (!eventId && req.params.organizerId) {
+    const organizer = await Organizer.findByPk(req.params.organizerId);
+    if (!organizer) throw new AppError("Organizer not found.", 404);
+    eventId = organizer.event_id;
+  }
+
+  req._resolvedEventId = eventId;
+  return eventId;
+};
+
+// shared role check — admin OR owner-of-event-org OR organiser-of-event.
+const hasEventPrivilege = async (userId, isAdmin, eventId) => {
+  if (isAdmin) return true;
+  if (!eventId) return false;
+
+  const event = await Event.findByPk(eventId);
+  if (!event) throw new AppError("Event not found.", 404);
+
+  const isOwner = await Owner.findOne({
+    where: { user_id: userId, organisation_id: event.organisation_id },
+  });
+  if (isOwner) return true;
+
+  const isOrganizer = await Organizer.findOne({
+    where: { user_id: userId, event_id: eventId },
+  });
+  if (isOrganizer) return true;
+
+  return false;
+};
+
 // Owners and Organisers
 const restrictToOwnOrg = async (req, res, next) => {
   try {
-    let eventId = req.params.eventId;
     const userId = req.user.id;
 
     if (req.user.isAdmin) return next();
 
-    if (req.params.organisationId && !eventId) {
+    // formats are global resources — only admins may write them.
+    if (req.params.formatId && !req.params.eventId) {
+      throw new AppError(
+        "Only an Admin can manage formats.",
+        403,
+      );
+    }
+
+    // org-scoped route with no event in scope: owner of the org passes.
+    if (req.params.organisationId && !req.params.eventId) {
       const isOwner = await Owner.findOne({
         where: { user_id: userId, organisation_id: req.params.organisationId },
       });
@@ -90,20 +159,7 @@ const restrictToOwnOrg = async (req, res, next) => {
       );
     }
 
-    // climb up to find the event (room-round routing case)
-    if (req.params.roomId) {
-      const room = await Room.findByPk(req.params.roomId, { include: [Round] });
-      if (!room) throw new AppError("Room not found.", 404);
-      eventId = room.Round.event_id;
-    } else if (req.params.teamId) {
-      const team = await Team.findByPk(req.params.teamId, { include: [Round] });
-      if (!team) throw new AppError("Team not found.", 404);
-      eventId = team.Round.event_id;
-    } else if (req.params.roundId) {
-      const round = await Round.findByPk(req.params.roundId);
-      if (!round) throw new AppError("Round not found.", 404);
-      eventId = round.event_id;
-    }
+    const eventId = await resolveEventId(req);
 
     if (!eventId) {
       throw new AppError(
@@ -112,21 +168,7 @@ const restrictToOwnOrg = async (req, res, next) => {
       );
     }
 
-    const event = await Event.findByPk(eventId);
-    if (!event) throw new AppError("Event not found.", 404);
-
-    const isOwner = await Owner.findOne({
-      where: {
-        user_id: userId,
-        organisation_id: event.organisation_id,
-      },
-    });
-    if (isOwner) return next();
-
-    const isOrganizer = await Organizer.findOne({
-      where: { user_id: userId, event_id: eventId },
-    });
-    if (isOrganizer) return next();
+    if (await hasEventPrivilege(userId, false, eventId)) return next();
 
     throw new AppError(
       "You do not have Organiser or Owner privileges for this event.",
@@ -137,7 +179,7 @@ const restrictToOwnOrg = async (req, res, next) => {
   }
 };
 
-// Chairs
+// Chairs (with owner/organiser/admin fallback so they can fix a botched ballot)
 const restrictToChair = async (req, res, next) => {
   try {
     const roomId = req.params.roomId;
@@ -156,14 +198,17 @@ const restrictToChair = async (req, res, next) => {
       ],
     });
 
-    if (!chairRecord) {
-      throw new AppError(
-        "Unauthorised: Only the designated Chair can perform this action.",
-        403,
-      );
-    }
+    if (chairRecord) return next();
 
-    next();
+    // fall through to event-scoped privilege so owners/organisers can
+    // recover a ballot when the chair is unavailable.
+    const eventId = await resolveEventId(req);
+    if (await hasEventPrivilege(userId, false, eventId)) return next();
+
+    throw new AppError(
+      "Unauthorised: Only the designated Chair (or an Owner/Organiser) can perform this action.",
+      403,
+    );
   } catch (error) {
     next(error);
   }
@@ -174,4 +219,5 @@ module.exports = {
   restrictToAdmin,
   restrictToOwnOrg,
   restrictToChair,
+  hasEventPrivilege,
 };

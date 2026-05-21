@@ -6,7 +6,7 @@ const statsController = require("../controllers/statsController");
 const participantController = require("../controllers/eventParticipantController");
 const { verifyToken } = require("../middleware/authMiddleware");
 
-// L5: tighter cap on login to slow brute-force; relies on `trust proxy` for real client IP.
+// tighter cap on login to slow brute-force; relies on `trust proxy` for real client IP.
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 10,

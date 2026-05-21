@@ -1,4 +1,4 @@
-const { Event } = require("../models");
+const { Event, sequelize } = require("../models");
 const AppError = require("../utils/AppError");
 
 const createEvent = async (req, res, next) => {
@@ -69,12 +69,18 @@ const deleteEvent = async (req, res, next) => {
     await event.destroy();
     res.status(204).json({ status: "success", data: null });
   } catch (error) {
-    // Soft Delete if constraints block Hard Delete
+    // wrap the soft-delete fallback in a transaction with a row lock
+    // so concurrent deactivations can't race on the `is_deleted` flip.
     if (error.name === "SequelizeForeignKeyConstraintError") {
       try {
-        const eventToSoftDelete = await Event.findByPk(req.params.eventId);
-        eventToSoftDelete.is_deleted = true;
-        await eventToSoftDelete.save();
+        await sequelize.transaction(async (t) => {
+          const eventToSoftDelete = await Event.findByPk(req.params.eventId, {
+            lock: t.LOCK.UPDATE,
+            transaction: t,
+          });
+          eventToSoftDelete.is_deleted = true;
+          await eventToSoftDelete.save({ transaction: t });
+        });
         return res.status(200).json({
           status: "success",
           message: "Event deactivated due to historical records.",

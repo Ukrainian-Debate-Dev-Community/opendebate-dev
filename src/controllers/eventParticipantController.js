@@ -1,5 +1,11 @@
 const crypto = require("crypto");
-const { EventParticipant, User, sequelize } = require("../models");
+const {
+  EventParticipant,
+  User,
+  TeamMember,
+  RoomAdjudicator,
+  sequelize,
+} = require("../models");
 const AppError = require("../utils/AppError");
 
 const addParticipant = async (req, res, next) => {
@@ -97,6 +103,29 @@ const removeParticipant = async (req, res, next) => {
     const participant = await EventParticipant.findByPk(participantId);
 
     if (!participant) throw new AppError("Participant not found.", 404);
+
+    // refuse removal while the participant is still attached to debate
+    // state — pulling them out from under a team/room would orphan scores
+    // and leave teams short-handed mid-round.
+    const onTeam = await TeamMember.findOne({
+      where: { participant_id: participantId },
+    });
+    if (onTeam) {
+      throw new AppError(
+        "Cannot remove participant: still a member of a team. Remove them from the team first.",
+        409,
+      );
+    }
+
+    const isAdjudicator = await RoomAdjudicator.findOne({
+      where: { participant_id: participantId },
+    });
+    if (isAdjudicator) {
+      throw new AppError(
+        "Cannot remove participant: still assigned as a room adjudicator. Reassign the room first.",
+        409,
+      );
+    }
 
     await participant.destroy();
 

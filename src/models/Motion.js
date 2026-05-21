@@ -9,6 +9,7 @@ module.exports = (sequelize) => {
       motion_text: { type: DataTypes.TEXT, allowNull: false },
       infoslide: { type: DataTypes.TEXT, allowNull: true },
       is_released: { type: DataTypes.BOOLEAN, defaultValue: false },
+      is_deleted: { type: DataTypes.BOOLEAN, defaultValue: false },
     },
     { tableName: "motions" },
   );

@@ -56,9 +56,13 @@ const submitScores = async (req, res, next) => {
       );
     }
 
-    // Room and its status
+    // row-lock the room so concurrent chair submissions can't both
+    // pass the status check and bulk-insert scores before the status flip.
+    // `of: Room` so the joined Format isn't locked (Postgres rejects FOR
+    // UPDATE on the nullable side of an outer join).
     const room = await Room.findByPk(roomId, {
       include: [Format],
+      lock: { level: transaction.LOCK.UPDATE, of: Room },
       transaction,
     });
     if (!room) throw new AppError("Room not found.", 404);
@@ -66,7 +70,7 @@ const submitScores = async (req, res, next) => {
     if (room.status === "completed" || room.status === "void") {
       throw new AppError(
         `Cannot submit scores. Room is already ${room.status}.`,
-        403,
+        409,
       );
     }
 

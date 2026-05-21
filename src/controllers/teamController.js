@@ -228,11 +228,30 @@ const updateTeam = async (req, res, next) => {
       );
 
       if (removedIds.length > 0) {
-        // removed return to waitlist
-        await EventParticipant.update(
-          { is_waitlist: true },
-          { where: { id: removedIds }, transaction },
+        // only return to the waitlist participants who aren't on any
+        // other team — a participant on a team in another round is still
+        // active and shouldn't be re-listed as available.
+        const stillOnOtherTeam = await TeamMember.findAll({
+          where: {
+            participant_id: removedIds,
+            team_id: { [Op.ne]: teamId },
+          },
+          attributes: ["participant_id"],
+          transaction,
+        });
+        const stillActiveIds = new Set(
+          stillOnOtherTeam.map((m) => m.participant_id),
         );
+        const trulyRemovedIds = removedIds.filter(
+          (id) => !stillActiveIds.has(id),
+        );
+
+        if (trulyRemovedIds.length > 0) {
+          await EventParticipant.update(
+            { is_waitlist: true },
+            { where: { id: trulyRemovedIds }, transaction },
+          );
+        }
       }
       if (participant_ids.length > 0) {
         // new members are removed from waitlist
@@ -288,12 +307,27 @@ const deleteTeam = async (req, res, next) => {
     // disand the team
     await team.destroy({ transaction });
 
-    // return to waitlist
     if (participantIds.length > 0) {
-      await EventParticipant.update(
-        { is_waitlist: true },
-        { where: { id: participantIds }, transaction },
+      // only re-list participants who aren't on any other team
+      // (a participant on another team in any round is still active).
+      const stillOnOtherTeam = await TeamMember.findAll({
+        where: { participant_id: participantIds },
+        attributes: ["participant_id"],
+        transaction,
+      });
+      const stillActiveIds = new Set(
+        stillOnOtherTeam.map((m) => m.participant_id),
       );
+      const trulyFreedIds = participantIds.filter(
+        (id) => !stillActiveIds.has(id),
+      );
+
+      if (trulyFreedIds.length > 0) {
+        await EventParticipant.update(
+          { is_waitlist: true },
+          { where: { id: trulyFreedIds }, transaction },
+        );
+      }
     }
 
     await transaction.commit();

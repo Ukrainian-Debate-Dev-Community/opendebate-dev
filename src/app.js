@@ -10,7 +10,7 @@ const apiRoutes = require("./routes/main");
 const AppError = require("./utils/AppError");
 const errorHandler = require("./middleware/errorHandler");
 
-// H8: fail-fast on missing/weak JWT_SECRET so tokens are never signed with `undefined`
+// fail-fast on missing/weak JWT_SECRET so tokens are never signed with `undefined`
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
   throw new Error("JWT_SECRET missing or too short (≥32 chars required)");
 }
@@ -32,7 +32,7 @@ const apiLimiter = rateLimit({
   legacyHeaders: false, // disable the `X-RateLimit-*` headers
 });
 
-// H5: CORS allowlist from env (comma-separated). Empty/missing → no cross-origin browser access.
+// CORS allowlist from env (comma-separated). Empty/missing → no cross-origin browser access.
 const corsOrigins = (process.env.CORS_ORIGINS || "")
   .split(",")
   .map((o) => o.trim())
@@ -65,7 +65,7 @@ app.get("/readyz", async (_req, res) => {
 // routes
 app.use("/api", apiLimiter, apiRoutes);
 
-// H6: JSON 404 for unknown routes so API clients don't break on default HTML
+// JSON 404 for unknown routes so API clients don't break on default HTML
 app.use((req, _res, next) =>
   next(new AppError(`Route ${req.originalUrl} not found.`, 404)),
 );
@@ -89,7 +89,7 @@ const startServer = async () => {
   }
 };
 
-// H6: structured logging for stray async failures, then exit (process.exit is required
+// structured logging for stray async failures, then exit (process.exit is required
 // to fail-fast on undefined state — exitCode wouldn't terminate while handles linger).
 /* eslint-disable n/no-process-exit, promise/catch-or-return */
 process.on("unhandledRejection", (err) => {
@@ -106,7 +106,7 @@ process.on("uncaughtException", (err) => {
   process.exit(1);
 });
 
-// H6: graceful shutdown — drain HTTP, close DB pool, then exit
+// graceful shutdown — drain HTTP, close DB pool, then exit
 ["SIGTERM", "SIGINT"].forEach((signal) => {
   process.on(signal, () => {
     console.log(`[${signal}] received — shutting down`);

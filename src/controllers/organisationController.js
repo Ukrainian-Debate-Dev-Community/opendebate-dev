@@ -119,15 +119,20 @@ const deleteOrganisation = async (req, res, next) => {
     await organisation.destroy();
     res.status(204).json({ status: "success", data: null });
   } catch (error) {
-    // Soft Delete fallback
+    // wrap the multi-write soft-delete in a transaction so a failure
+    // between the `status` flip and the `is_deleted` flip can't leave the
+    // row in a half-deactivated state.
     if (error.name === "SequelizeForeignKeyConstraintError") {
       try {
-        const orgToSoftDelete = await Organisation.findByPk(
-          req.params.organisationId,
-        );
-        orgToSoftDelete.status = "inactive";
-        orgToSoftDelete.is_deleted = true;
-        await orgToSoftDelete.save();
+        await sequelize.transaction(async (t) => {
+          const orgToSoftDelete = await Organisation.findByPk(
+            req.params.organisationId,
+            { lock: t.LOCK.UPDATE, transaction: t },
+          );
+          orgToSoftDelete.status = "inactive";
+          orgToSoftDelete.is_deleted = true;
+          await orgToSoftDelete.save({ transaction: t });
+        });
 
         return res.status(200).json({
           status: "success",
