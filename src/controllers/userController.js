@@ -154,7 +154,7 @@ const deleteUser = async (req, res, next) => {
     // if SQL Server blocked it due to historical data => Soft Delete
     if (error.name === "SequelizeForeignKeyConstraintError") {
       try {
-        const userToSoftDelete = await User.findByPk(req.params.id);
+        const userToSoftDelete = await User.findByPk(req.user.id);
 
         // flip the state
         userToSoftDelete.is_deleted = true;

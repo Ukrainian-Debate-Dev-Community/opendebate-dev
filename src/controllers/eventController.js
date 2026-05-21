@@ -72,7 +72,7 @@ const deleteEvent = async (req, res, next) => {
     // Soft Delete if constraints block Hard Delete
     if (error.name === "SequelizeForeignKeyConstraintError") {
       try {
-        const eventToSoftDelete = await Event.findByPk(req.params.id);
+        const eventToSoftDelete = await Event.findByPk(req.params.eventId);
         eventToSoftDelete.is_deleted = true;
         await eventToSoftDelete.save();
         return res.status(200).json({

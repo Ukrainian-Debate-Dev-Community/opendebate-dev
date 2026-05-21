@@ -1,6 +1,7 @@
 const {
   RoomSpeaker,
   EventParticipant,
+  Event,
   Score,
   sequelize,
 } = require("../models");
