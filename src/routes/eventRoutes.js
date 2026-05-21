@@ -23,8 +23,8 @@ router.get(
   "/organisation/:organisationId",
   eventController.getOrganisationEvents,
 );
-router.post("/", restrictToOwnOrg, eventController.createEvent);
-router.put("/:id", restrictToOwnOrg, eventController.updateEvent);
-router.delete("/:id", restrictToOwnOrg, eventController.deleteEvent);
+router.post("/:organisationId", restrictToOwnOrg, eventController.createEvent); // updated authMiddleware will allow Owners to create events
+router.put("/:eventId", restrictToOwnOrg, eventController.updateEvent);
+router.delete("/:eventId", restrictToOwnOrg, eventController.deleteEvent);
 
 module.exports = router;

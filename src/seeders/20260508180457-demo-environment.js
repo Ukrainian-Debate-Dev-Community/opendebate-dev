@@ -58,7 +58,7 @@ module.exports = {
     await queryInterface.bulkInsert("organisations", [
       {
         name: "KPI Debate Club",
-        type: "academical",
+        type: "academic",
         status: "active",
         online: false,
         created_at: now,

@@ -186,6 +186,12 @@ module.exports = {
       name: { type: Sequelize.STRING(120), allowNull: false },
     });
 
+    await queryInterface.addConstraint("teams", {
+      fields: ["round_id", "name"],
+      type: "unique",
+      name: "unique_team_name_per_round",
+    });
+
     // Team Members
     await queryInterface.createTable("team_members", {
       id: { type: Sequelize.INTEGER, primaryKey: true, autoIncrement: true },

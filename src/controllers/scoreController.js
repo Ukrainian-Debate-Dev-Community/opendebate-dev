@@ -30,6 +30,15 @@ const submitScores = async (req, res, next) => {
       );
     }
 
+    // prevent duplicate Teams
+    const submittedTeamIds = new Set(teamRankings.map((t) => t.room_team_id));
+    if (submittedTeamIds.size !== teamRankings.length) {
+      throw new AppError(
+        "Duplicate teams found in rankings. Each team can only be ranked once.",
+        400,
+      );
+    }
+
     // Room and its status
     const room = await Room.findByPk(roomId, {
       include: [Format],
@@ -67,6 +76,9 @@ const submitScores = async (req, res, next) => {
     }
     const roomAdjudicatorId = adjudicatorRecord.id;
 
+    // Set to store all valid speaker IDs that belong to this room
+    const validSpeakerIds = new Set();
+
     // update Team Rankings and force Speaker inheritance
     for (const teamData of teamRankings) {
       const roomTeam = await RoomTeam.findByPk(teamData.room_team_id, {
@@ -76,7 +88,7 @@ const submitScores = async (req, res, next) => {
 
       if (!roomTeam || roomTeam.room_id !== room.id) {
         throw new AppError(
-          `Invalid room_team_id: ${teamData.room_team_id}`,
+          `Invalid room_team_id: ${teamData.room_team_id} does not belong to this room.`,
           400,
         );
       }
@@ -84,8 +96,9 @@ const submitScores = async (req, res, next) => {
       roomTeam.rank = teamData.rank;
       await roomTeam.save({ transaction });
 
-      // apply the rank to the speakers
+      // apply the rank to the speakers and harvest their IDs for validation
       for (const speaker of roomTeam.RoomSpeakers) {
+        validSpeakerIds.add(speaker.id);
         speaker.rank = teamData.rank;
         await speaker.save({ transaction });
       }
@@ -109,6 +122,14 @@ const submitScores = async (req, res, next) => {
 
     // process scores
     for (const sp of speakerScores) {
+      // missplaced speaker from another room
+      if (!validSpeakerIds.has(sp.room_speaker_id)) {
+        throw new AppError(
+          `Invalid room_speaker_id: ${sp.room_speaker_id} does not belong to this room.`,
+          400,
+        );
+      }
+
       // format boundary validation
       if (sp.score < format.score_min || sp.score > format.score_max) {
         throw new AppError(

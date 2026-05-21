@@ -14,6 +14,12 @@ const getUserStats = async (req, res, next) => {
     const participants = await EventParticipant.findAll({
       where: { user_id: targetUserId, role: "speaker" },
       attributes: ["id"],
+      include: [
+        {
+          model: Event,
+          where: { is_deleted: false },
+        },
+      ],
     });
 
     if (!participants || participants.length === 0) {

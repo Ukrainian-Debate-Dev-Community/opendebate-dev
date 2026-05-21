@@ -24,6 +24,10 @@ const createFormat = async (req, res, next) => {
       throw new AppError("Please provide all required format parameters.", 400);
     }
 
+    if (score_min >= score_max) {
+      throw new AppError("Minimum score must be less than maximum score.", 400);
+    }
+
     const existingFormat = await Format.findOne({ where: { code } });
     if (existingFormat) {
       throw new AppError(`A format with code ${code} already exists.`, 409);
@@ -56,7 +60,7 @@ const getAllFormats = async (req, res, next) => {
 
 const getFormat = async (req, res, next) => {
   try {
-    const format = await Format.findByPk(req.params.id);
+    const format = await Format.findByPk(req.params.formatId);
     if (!format) throw new AppError("Format not found.", 404);
 
     res.status(200).json({ status: "success", data: format });
@@ -67,7 +71,7 @@ const getFormat = async (req, res, next) => {
 
 const updateFormat = async (req, res, next) => {
   try {
-    const format = await Format.findByPk(req.params.id);
+    const format = await Format.findByPk(req.params.formatId);
     if (!format) throw new AppError("Format not found.", 404);
 
     const {
@@ -98,7 +102,7 @@ const updateFormat = async (req, res, next) => {
 
 const deleteFormat = async (req, res, next) => {
   try {
-    const format = await Format.findByPk(req.params.id);
+    const format = await Format.findByPk(req.params.formatId);
     if (!format) throw new AppError("Format not found.", 404);
 
     await format.destroy();

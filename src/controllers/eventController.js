@@ -3,7 +3,8 @@ const AppError = require("../utils/AppError");
 
 const createEvent = async (req, res, next) => {
   try {
-    const { name, organisation_id, start_date, end_date, is_ranked } = req.body;
+    const { name, start_date, end_date, is_ranked } = req.body;
+    const organisation_id = req.params.organisationId;
 
     if (!name || !organisation_id) {
       throw new AppError("Please provide a name and an organisation_id.", 400);
@@ -39,7 +40,7 @@ const getOrganisationEvents = async (req, res, next) => {
 const updateEvent = async (req, res, next) => {
   try {
     const { name, start_date, end_date, status, is_ranked } = req.body;
-    const event = await Event.findByPk(req.params.id);
+    const event = await Event.findByPk(req.params.eventId);
 
     if (!event || event.is_deleted) throw new AppError("Event not found.", 404);
 
@@ -62,7 +63,7 @@ const updateEvent = async (req, res, next) => {
 
 const deleteEvent = async (req, res, next) => {
   try {
-    const event = await Event.findByPk(req.params.id);
+    const event = await Event.findByPk(req.params.eventId);
     if (!event) throw new AppError("Event not found.", 404);
 
     await event.destroy();

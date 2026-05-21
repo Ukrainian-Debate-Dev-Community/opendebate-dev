@@ -7,6 +7,7 @@ const {
   Format,
   Team,
   TeamMember,
+  Round,
   sequelize,
 } = require("../models");
 const AppError = require("../utils/AppError");
@@ -30,8 +31,49 @@ const createRoom = async (req, res, next) => {
     const format = await Format.findByPk(format_id, { transaction });
     if (!format) throw new AppError("Format not found.", 404);
 
+    const round = await Round.findByPk(roundId, { transaction });
+    if (!round) throw new AppError("Round not found.", 404);
+    const eventId = round.event_id;
+
+    if (round.status == "completed") {
+      throw new AppError(
+        "Can't create the room for the round that is already completed",
+        403,
+      );
+    }
+
     const teamIds = teams.map((t) => t.team_id);
     const adjudicatorIds = adjudicators.map((adj) => adj.participant_id);
+
+    const validTeams = await Team.findAll({
+      where: {
+        id: teamIds,
+        round_id: roundId,
+      },
+      transaction,
+    });
+
+    if (validTeams.length !== teamIds.length) {
+      throw new AppError(
+        "One or more teams do not exist, are duplicated, or do not belong to this round.",
+        400,
+      );
+    }
+
+    const validAdjudicators = await EventParticipant.findAll({
+      where: {
+        id: adjudicatorIds,
+        event_id: eventId,
+      },
+      transaction,
+    });
+
+    if (validAdjudicators.length !== adjudicatorIds.length) {
+      throw new AppError(
+        "One or more adjudicators do not exist, are duplicated, or do not belong to this event.",
+        400,
+      );
+    }
 
     // check for double-booked Teams
     const existingRoomTeams = await RoomTeam.findAll({

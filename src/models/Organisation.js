@@ -8,7 +8,7 @@ module.exports = (sequelize) => {
       name: { type: DataTypes.STRING(120), allowNull: false },
       type: {
         type: DataTypes.STRING(20),
-        defaultValue: "academic",
+        defaultValue: "personal",
         validate: { isIn: [["academic", "personal"]] },
       },
       status: {

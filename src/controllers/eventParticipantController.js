@@ -5,7 +5,7 @@ const AppError = require("../utils/AppError");
 const addParticipant = async (req, res, next) => {
   try {
     const eventId = req.params.eventId;
-    const { user_id, display_name, role, is_waitlist } = req.body;
+    const { user_id, display_name, role, is_waitlist = true } = req.body;
 
     if (!display_name || !role) {
       throw new AppError("Display name and role are required.", 400);
@@ -39,7 +39,7 @@ const addParticipant = async (req, res, next) => {
       user_id: user_id || null,
       display_name,
       role,
-      is_waitlist: is_waitlist || true,
+      is_waitlist: is_waitlist,
       claim_token_hash: claimTokenHash,
     });
 

@@ -9,10 +9,10 @@ const {
 router.use(verifyToken);
 
 router.get("/", formatController.getAllFormats);
-router.get("/:id", formatController.getFormat);
+router.get("/:formatId", formatController.getFormat);
 
 router.post("/", restrictToAdmin, formatController.createFormat);
-router.put("/:id", restrictToAdmin, formatController.updateFormat);
-router.delete("/:id", restrictToAdmin, formatController.deleteFormat);
+router.put("/:formatId", restrictToAdmin, formatController.updateFormat);
+router.delete("/:formatId", restrictToAdmin, formatController.deleteFormat);
 
 module.exports = router;

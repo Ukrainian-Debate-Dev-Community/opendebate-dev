@@ -8,7 +8,16 @@ module.exports = (sequelize) => {
       round_id: { type: DataTypes.INTEGER, allowNull: false },
       name: { type: DataTypes.STRING(120), allowNull: false },
     },
-    { tableName: "teams" },
+    {
+      tableName: "teams",
+      indexes: [
+        {
+          unique: true,
+          fields: ["round_id", "name"],
+          name: "unique_team_name_per_round",
+        },
+      ],
+    },
   );
 
   Team.associate = (models) => {

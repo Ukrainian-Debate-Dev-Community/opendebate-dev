@@ -59,9 +59,14 @@ const getAllOrganisations = async (req, res, next) => {
 
 const getOrganisation = async (req, res, next) => {
   try {
-    const organisation = await Organisation.findByPk(req.params.id, {
-      include: [{ model: User, as: "Owners", attributes: ["id", "username"] }],
-    });
+    const organisation = await Organisation.findByPk(
+      req.params.organisationId,
+      {
+        include: [
+          { model: User, as: "Owners", attributes: ["id", "username"] },
+        ],
+      },
+    );
 
     if (
       !organisation ||
@@ -79,7 +84,7 @@ const getOrganisation = async (req, res, next) => {
 const updateOrganisation = async (req, res, next) => {
   try {
     const { name, type, online, link, status } = req.body;
-    const organisation = await Organisation.findByPk(req.params.id);
+    const organisation = await Organisation.findByPk(req.params.organisationId);
 
     if (!organisation || organisation.is_deleted)
       throw new AppError("Organisation not found.", 404);
@@ -106,7 +111,7 @@ const updateOrganisation = async (req, res, next) => {
 
 const deleteOrganisation = async (req, res, next) => {
   try {
-    const organisation = await Organisation.findByPk(req.params.id);
+    const organisation = await Organisation.findByPk(req.params.organisationId);
 
     if (!organisation) throw new AppError("Organisation not found.", 404);
 
@@ -117,7 +122,9 @@ const deleteOrganisation = async (req, res, next) => {
     // Soft Delete fallback
     if (error.name === "SequelizeForeignKeyConstraintError") {
       try {
-        const orgToSoftDelete = await Organisation.findByPk(req.params.id);
+        const orgToSoftDelete = await Organisation.findByPk(
+          req.params.organisationId,
+        );
         orgToSoftDelete.status = "inactive";
         orgToSoftDelete.is_deleted = true;
         await orgToSoftDelete.save();
@@ -139,7 +146,7 @@ const deleteOrganisation = async (req, res, next) => {
 
 const addOwner = async (req, res, next) => {
   try {
-    const organisationId = req.params.id;
+    const organisationId = req.params.organisationId;
     const { targetUserId } = req.body;
 
     if (!targetUserId)
@@ -170,7 +177,7 @@ const addOwner = async (req, res, next) => {
 
 const removeOwner = async (req, res, next) => {
   try {
-    const organisationId = req.params.id;
+    const organisationId = req.params.organisationId;
     const ownerIdToRemove = req.params.ownerId;
 
     const ownerCount = await Owner.count({

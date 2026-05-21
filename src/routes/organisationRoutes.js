@@ -10,15 +10,27 @@ const {
 router.use(verifyToken);
 
 router.get("/", orgController.getAllOrganisations);
-router.get("/:id", orgController.getOrganisation);
+router.get("/:organisationId", orgController.getOrganisation);
 
 router.post("/", restrictToAdmin, orgController.createOrganisation);
-router.put("/:id", restrictToOwnOrg, orgController.updateOrganisation);
-router.delete("/:id", restrictToOwnOrg, orgController.deleteOrganisation);
-
-router.post("/:id/owners", restrictToOwnOrg, orgController.addOwner);
+router.put(
+  "/:organisationId",
+  restrictToOwnOrg,
+  orgController.updateOrganisation,
+);
 router.delete(
-  "/:id/owners/:ownerId",
+  "/:organisationId",
+  restrictToAdmin,
+  orgController.deleteOrganisation,
+);
+
+router.post(
+  "/:organisationId/owners",
+  restrictToOwnOrg,
+  orgController.addOwner,
+);
+router.delete(
+  "/:organisationId/owners/:ownerId",
   restrictToAdmin,
   orgController.removeOwner,
 );

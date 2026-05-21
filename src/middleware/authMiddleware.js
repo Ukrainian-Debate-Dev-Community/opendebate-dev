@@ -75,6 +75,19 @@ const restrictToOwnOrg = async (req, res, next) => {
 
     if (req.user.isAdmin) return next();
 
+    if (req.params.organisationId && !eventId) {
+      const isOwner = await Owner.findOne({
+        where: { user_id: userId, organisation_id: req.params.organisationId },
+      });
+
+      if (isOwner) return next();
+
+      throw new AppError(
+        "Only an Owner of this organisation can perform this action.",
+        403,
+      );
+    }
+
     // climb up to find the event (room-round routing case)
     if (req.params.roomId) {
       const room = await Room.findByPk(req.params.roomId, { include: [Round] });
@@ -101,7 +114,10 @@ const restrictToOwnOrg = async (req, res, next) => {
     if (!event) throw new AppError("Event not found.", 404);
 
     const isOwner = await Owner.findOne({
-      where: { user_id: userId, organisation_id: event.organisation_id },
+      where: {
+        user_id: userId,
+        organisation_id: event.organisation_id,
+      },
     });
     if (isOwner) return next();
 

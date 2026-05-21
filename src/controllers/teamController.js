@@ -8,6 +8,7 @@ const {
   RoomTeam,
   sequelize,
 } = require("../models");
+const { Op } = require("sequelize");
 const AppError = require("../utils/AppError");
 
 const createTeam = async (req, res, next) => {
@@ -29,10 +30,27 @@ const createTeam = async (req, res, next) => {
       );
     }
 
-    const round = await Round.findByPk(roundId);
+    const round = await Round.findByPk(roundId, { transaction });
     if (!round) throw new AppError("Round not found.", 404);
 
-    // none of these participants are already in a team
+    const uniqueParticipantIds = [...new Set(participant_ids)];
+
+    const validParticipants = await EventParticipant.findAll({
+      where: {
+        id: uniqueParticipantIds,
+        event_id: round.event_id,
+      },
+      transaction,
+    });
+
+    if (validParticipants.length !== uniqueParticipantIds.length) {
+      throw new AppError(
+        "One or more participants are invalid or do not belong to this event.",
+        400,
+      );
+    }
+
+    // none of these participants are already in a team (this round)
     const existingMemberships = await TeamMember.findAll({
       where: { participant_id: participant_ids },
       include: [
@@ -123,37 +141,57 @@ const updateTeam = async (req, res, next) => {
     const { name, participant_ids } = req.body;
 
     const team = await Team.findByPk(teamId, {
-      include: [TeamMember],
+      include: [TeamMember, Round], // now I also need Round to get the event_id
       transaction,
     });
 
     if (!team) throw new AppError("Team not found.", 404);
 
     const roundId = team.round_id;
-
-    const existingMemberships = await TeamMember.findAll({
-      where: { participant_id: participant_ids },
-      include: [
-        {
-          model: Team,
-          required: true,
-          where: { round_id: roundId },
-        },
-      ],
-      transaction,
-    });
-
-    if (existingMemberships.length > 0) {
-      throw new AppError(
-        "One or more participants are already assigned to a team in this round.",
-        409,
-      );
-    }
+    const eventId = team.Round.event_id;
 
     if (name) team.name = name;
 
     if (participant_ids && Array.isArray(participant_ids)) {
-      // is the team in an active/finished room
+      const uniqueParticipantIds = [...new Set(participant_ids)];
+      const validParticipants = await EventParticipant.findAll({
+        where: {
+          id: uniqueParticipantIds,
+          event_id: eventId,
+        },
+        transaction,
+      });
+
+      if (validParticipants.length !== uniqueParticipantIds.length) {
+        throw new AppError(
+          "One or more participants are invalid or do not belong to this event.",
+          400,
+        );
+      }
+
+      const existingMemberships = await TeamMember.findAll({
+        where: { participant_id: participant_ids },
+        include: [
+          {
+            model: Team,
+            required: true,
+            where: {
+              round_id: roundId,
+              id: { [Op.ne]: teamId }, // exclude the current team from the duplicate check
+            },
+          },
+        ],
+        transaction,
+      });
+
+      if (existingMemberships.length > 0) {
+        throw new AppError(
+          "One or more participants are already assigned to a team in this round.",
+          409,
+        );
+      }
+
+      // is the team in an active/completed room
       const roomTeams = await RoomTeam.findAll({
         where: { team_id: teamId },
         transaction,
@@ -161,9 +199,12 @@ const updateTeam = async (req, res, next) => {
 
       for (const rt of roomTeams) {
         const room = await Room.findByPk(rt.room_id, { transaction });
-        if (room && (room.status === "judging" || room.status === "finished")) {
+        if (
+          room &&
+          (room.status === "judging" || room.status === "completed")
+        ) {
           throw new AppError(
-            "Cannot modify team roster. This team is in a room that is currently being judged or is already finished.",
+            "Cannot modify team roster. This team is in a room that is currently being judged or is already completed.",
             400,
           );
         }
@@ -181,7 +222,7 @@ const updateTeam = async (req, res, next) => {
       }));
       await TeamMember.bulkCreate(membersToInsert, { transaction });
 
-      // witlist management
+      // waitlist management
       const removedIds = oldParticipantIds.filter(
         (id) => !participant_ids.includes(id),
       );
