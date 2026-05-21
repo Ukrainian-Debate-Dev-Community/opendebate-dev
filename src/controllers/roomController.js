@@ -21,11 +21,24 @@ const createRoom = async (req, res, next) => {
     // teams: [{ team_id: 1, position: 1 }, { team_id: 2, position: 2 }]
     // adjudicators: [{ participant_id: 5, role: 'chair' }, { participant_id: 6, role: 'panelist' }]
 
-    if (!format_id || !teams || !adjudicators) {
-      throw new AppError(
-        "format_id, teams array, and adjudicators array are required.",
-        400,
-      );
+    if (!format_id) {
+      throw new AppError("format_id is required.", 400);
+    }
+    if (!Array.isArray(teams) || teams.length === 0) {
+      throw new AppError("teams must be a non-empty array.", 400);
+    }
+    if (!Array.isArray(adjudicators) || adjudicators.length === 0) {
+      throw new AppError("adjudicators must be a non-empty array.", 400);
+    }
+
+    const ALLOWED_ADJ_ROLES = ["chair", "panelist", "trainee"];
+    for (const adj of adjudicators) {
+      if (!ALLOWED_ADJ_ROLES.includes(adj.role)) {
+        throw new AppError(
+          `Invalid adjudicator role '${adj.role}'. Allowed: ${ALLOWED_ADJ_ROLES.join(", ")}.`,
+          400,
+        );
+      }
     }
 
     const format = await Format.findByPk(format_id, { transaction });

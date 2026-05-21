@@ -16,7 +16,7 @@ const createTeam = async (req, res, next) => {
   try {
     const roundId = req.params.roundId;
     const { name, participant_ids } = req.body;
-    // participant_ids expects an ordered array [first_id, second_id ... ], could be duplicates
+    // participant_ids expects an ordered array [first_id, second_id ... ], could be duplicates (iron-person)
 
     if (
       !name ||

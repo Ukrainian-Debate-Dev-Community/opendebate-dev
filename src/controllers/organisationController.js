@@ -1,4 +1,4 @@
-const { Organisation, Owner, User } = require("../models");
+const { Organisation, Owner, User, sequelize } = require("../models");
 const AppError = require("../utils/AppError");
 
 const createOrganisation = async (req, res, next) => {
@@ -176,14 +176,20 @@ const addOwner = async (req, res, next) => {
 };
 
 const removeOwner = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
   try {
     const organisationId = req.params.organisationId;
     const ownerIdToRemove = req.params.ownerId;
 
-    const ownerCount = await Owner.count({
+    // lock every owner row of this org so two concurrent removals can't both
+    // observe "2 owners exist" and both delete, leaving the org orphaned.
+    const owners = await Owner.findAll({
       where: { organisation_id: organisationId },
+      lock: transaction.LOCK.UPDATE,
+      transaction,
     });
-    if (ownerCount <= 1) {
+
+    if (owners.length <= 1) {
       throw new AppError(
         "Cannot remove the last owner. Assign a new owner first or delete the Organisation.",
         400,
@@ -192,6 +198,7 @@ const removeOwner = async (req, res, next) => {
 
     const deletedCount = await Owner.destroy({
       where: { user_id: ownerIdToRemove, organisation_id: organisationId },
+      transaction,
     });
 
     if (deletedCount === 0)
@@ -200,10 +207,13 @@ const removeOwner = async (req, res, next) => {
         404,
       );
 
+    await transaction.commit();
+
     res
       .status(200)
       .json({ status: "success", message: "Owner removed successfully." });
   } catch (error) {
+    await transaction.rollback();
     next(error);
   }
 };

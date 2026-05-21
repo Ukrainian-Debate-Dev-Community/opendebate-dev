@@ -23,9 +23,15 @@ const submitScores = async (req, res, next) => {
       speakerScores: [ { room_speaker_id: 1, score: 70 }, { room_speaker_id: 2, score: 71 }, ... ]
     */
 
-    if (!teamRankings || !speakerScores) {
+    if (!Array.isArray(teamRankings) || teamRankings.length === 0) {
       throw new AppError(
-        "You must provide both teamRankings and speakerScores.",
+        "teamRankings must be a non-empty array.",
+        400,
+      );
+    }
+    if (!Array.isArray(speakerScores) || speakerScores.length === 0) {
+      throw new AppError(
+        "speakerScores must be a non-empty array.",
         400,
       );
     }
@@ -35,6 +41,17 @@ const submitScores = async (req, res, next) => {
     if (submittedTeamIds.size !== teamRankings.length) {
       throw new AppError(
         "Duplicate teams found in rankings. Each team can only be ranked once.",
+        400,
+      );
+    }
+
+    // prevent duplicate Speakers
+    const submittedSpeakerIds = new Set(
+      speakerScores.map((s) => s.room_speaker_id),
+    );
+    if (submittedSpeakerIds.size !== speakerScores.length) {
+      throw new AppError(
+        "Duplicate speakers found in scores. Each speaker can only be scored once.",
         400,
       );
     }
@@ -54,6 +71,23 @@ const submitScores = async (req, res, next) => {
     }
 
     const format = room.Format;
+
+    // team ranks must be a permutation of 1..teams_per_room
+    if (teamRankings.length !== format.teams_per_room) {
+      throw new AppError(
+        `Format ${format.code} requires exactly ${format.teams_per_room} team rankings. You provided ${teamRankings.length}.`,
+        400,
+      );
+    }
+    const sortedRanks = teamRankings.map((r) => r.rank).sort((a, b) => a - b);
+    for (let i = 0; i < sortedRanks.length; i++) {
+      if (sortedRanks[i] !== i + 1) {
+        throw new AppError(
+          `Team ranks must be a permutation of 1..${format.teams_per_room}.`,
+          400,
+        );
+      }
+    }
 
     // the requester is the Chair of this room
     const adjudicatorRecord = await RoomAdjudicator.findOne({
@@ -130,10 +164,19 @@ const submitScores = async (req, res, next) => {
         );
       }
 
-      // format boundary validation
-      if (sp.score < format.score_min || sp.score > format.score_max) {
+      // score must be a finite number
+      const score = Number(sp.score);
+      if (!Number.isFinite(score)) {
         throw new AppError(
-          `Score ${sp.score} is out of bounds for format ${format.code} (${format.score_min}-${format.score_max}).`,
+          `Score for speaker ${sp.room_speaker_id} must be a number.`,
+          400,
+        );
+      }
+
+      // format boundary validation
+      if (score < format.score_min || score > format.score_max) {
+        throw new AppError(
+          `Score ${score} is out of bounds for format ${format.code} (${format.score_min}-${format.score_max}).`,
           400,
         );
       }
@@ -142,7 +185,7 @@ const submitScores = async (req, res, next) => {
       scoresToInsert.push({
         room_speaker_id: sp.room_speaker_id,
         room_adjudicator_id: roomAdjudicatorId,
-        value: sp.score,
+        value: score,
       });
     }
 

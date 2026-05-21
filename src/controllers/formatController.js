@@ -1,5 +1,8 @@
 const { Format } = require("../models");
+const { Op } = require("sequelize");
 const AppError = require("../utils/AppError");
+
+const isPositiveInt = (v) => Number.isInteger(v) && v > 0;
 
 const createFormat = async (req, res, next) => {
   try {
@@ -26,6 +29,13 @@ const createFormat = async (req, res, next) => {
 
     if (score_min >= score_max) {
       throw new AppError("Minimum score must be less than maximum score.", 400);
+    }
+
+    if (!isPositiveInt(teams_per_room) || !isPositiveInt(speakers_per_team)) {
+      throw new AppError(
+        "teams_per_room and speakers_per_team must be positive integers.",
+        400,
+      );
     }
 
     const existingFormat = await Format.findOne({ where: { code } });
@@ -83,6 +93,34 @@ const updateFormat = async (req, res, next) => {
       score_min,
       score_max,
     } = req.body;
+
+    if (code !== undefined && code !== format.code) {
+      const existingFormat = await Format.findOne({
+        where: { code, id: { [Op.ne]: format.id } },
+      });
+      if (existingFormat) {
+        throw new AppError(`A format with code ${code} already exists.`, 409);
+      }
+    }
+
+    if (
+      teams_per_room !== undefined &&
+      !isPositiveInt(teams_per_room)
+    ) {
+      throw new AppError("teams_per_room must be a positive integer.", 400);
+    }
+    if (
+      speakers_per_team !== undefined &&
+      !isPositiveInt(speakers_per_team)
+    ) {
+      throw new AppError("speakers_per_team must be a positive integer.", 400);
+    }
+
+    const nextMin = score_min !== undefined ? score_min : format.score_min;
+    const nextMax = score_max !== undefined ? score_max : format.score_max;
+    if (nextMin >= nextMax) {
+      throw new AppError("Minimum score must be less than maximum score.", 400);
+    }
 
     if (name !== undefined) format.name = name;
     if (code !== undefined) format.code = code;

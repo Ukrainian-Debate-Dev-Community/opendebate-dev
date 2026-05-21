@@ -1,7 +1,6 @@
 const jwt = require("jsonwebtoken");
 const {
   User,
-  Admin,
   Event,
   Room,
   Round,
@@ -41,15 +40,18 @@ const verifyToken = async (req, res, next) => {
       );
     }
 
-    const adminRecord = await Admin.findOne({
-      where: { user_id: currentUser.id },
-    });
-
+    // H1: trust the `isAdmin` claim from the token; admin grant/revoke must re-issue.
     req.user = currentUser;
-    req.user.isAdmin = !!adminRecord;
+    req.user.isAdmin = !!decoded.isAdmin;
 
     next();
   } catch (error) {
+    if (error.name === "TokenExpiredError") {
+      return next(new AppError("Session expired. Please log in again.", 401));
+    }
+    if (error.name === "JsonWebTokenError") {
+      return next(new AppError("Invalid authentication token.", 401));
+    }
     next(error);
   }
 };

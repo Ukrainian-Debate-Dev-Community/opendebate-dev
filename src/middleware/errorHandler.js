@@ -34,12 +34,11 @@ const errorHandler = (err, req, res, _next) => {
     });
   }
 
-  // JWT-specific errors
+  // JWT-specific errors (fallback — verifyToken already translates these to AppError)
   if (err.name === "JsonWebTokenError") {
     return res.status(401).json({
       status: "fail",
       message: "Invalid token.",
-      details: err.message,
     });
   }
 
@@ -47,7 +46,6 @@ const errorHandler = (err, req, res, _next) => {
     return res.status(401).json({
       status: "fail",
       message: "Your token has expired. Please log in again.",
-      details: err.message,
     });
   }
 

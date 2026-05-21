@@ -1,15 +1,20 @@
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
-const { User } = require("../models");
+const { User, Admin } = require("../models");
 const AppError = require("../utils/AppError");
 
-// helper to sign tokens with user_id
-const signToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
+// helper to sign tokens with user_id (and isAdmin so middleware can skip an Admin lookup per request)
+const signToken = (id, isAdmin = false) => {
+  return jwt.sign({ id, isAdmin }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN,
   });
 };
+
+// H10: constant-time login — bcrypt compare against a fixed hash when the user lookup misses,
+// so response timing doesn't reveal whether the username exists.
+const DUMMY_BCRYPT_HASH =
+  "$2b$10$CwTycUXWue0Thq9StjUM0uJ8L0PemoTPMI4Co.s48d8/CYUjFp3KO";
 
 const createUser = async (req, res, next) => {
   try {
@@ -54,6 +59,7 @@ const login = async (req, res, next) => {
     const user = await User.findOne({ where: { username } });
 
     if (!user || user.is_deleted) {
+      await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
       throw new AppError("Invalid credentials.", 401);
     }
 
@@ -63,7 +69,8 @@ const login = async (req, res, next) => {
       throw new AppError("Invalid credentials.", 401);
     }
 
-    const token = signToken(user.id);
+    const adminRecord = await Admin.findOne({ where: { user_id: user.id } });
+    const token = signToken(user.id, !!adminRecord);
 
     res.status(200).json({
       status: "success",

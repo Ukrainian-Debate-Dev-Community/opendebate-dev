@@ -1,5 +1,5 @@
 const crypto = require("crypto");
-const { EventParticipant, User } = require("../models");
+const { EventParticipant, User, sequelize } = require("../models");
 const AppError = require("../utils/AppError");
 
 const addParticipant = async (req, res, next) => {
@@ -109,6 +109,7 @@ const removeParticipant = async (req, res, next) => {
 };
 
 const claimIdentity = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
   try {
     const { participantId } = req.params;
     const { claim_token } = req.body;
@@ -116,13 +117,18 @@ const claimIdentity = async (req, res, next) => {
 
     if (!claim_token) throw new AppError("Please provide a claim token.", 400);
 
-    const participant = await EventParticipant.findByPk(participantId);
+    // row-lock the participant for the duration of this txn to prevent two
+    // concurrent claims both passing the user_id == null check.
+    const participant = await EventParticipant.findByPk(participantId, {
+      lock: transaction.LOCK.UPDATE,
+      transaction,
+    });
     if (!participant) throw new AppError("Participant not found.", 404);
 
     if (participant.user_id) {
       throw new AppError(
         "This participant record has already been claimed.",
-        400,
+        409,
       );
     }
 
@@ -137,7 +143,9 @@ const claimIdentity = async (req, res, next) => {
     participant.user_id = userId;
     participant.claim_token_hash = null;
     participant.claim_token_used_at = new Date();
-    await participant.save();
+    await participant.save({ transaction });
+
+    await transaction.commit();
 
     res.status(200).json({
       status: "success",
@@ -146,6 +154,7 @@ const claimIdentity = async (req, res, next) => {
       data: participant,
     });
   } catch (error) {
+    await transaction.rollback();
     next(error);
   }
 };
