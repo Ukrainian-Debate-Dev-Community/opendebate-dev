@@ -3,10 +3,13 @@ const errorHandler = (err, req, res, _next) => {
   err.statusCode = err.statusCode || 500;
   err.status = err.status || "error";
 
-  // log the error in development
-  console.error(`[ERROR] ${err.name}: ${err.message}`);
-  if (process.env.NODE_ENV === "development") {
-    console.error(err.stack);
+  // log the error not in test
+  if (process.env.NODE_ENV !== "test") {
+    console.error(`[ERROR] ${err.name}: ${err.message}`);
+
+    if (process.env.NODE_ENV === "development") {
+      console.error(err.stack);
+    }
   }
 
   // specific handlers for Sequelize Database Errors

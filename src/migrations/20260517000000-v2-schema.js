@@ -160,6 +160,12 @@ module.exports = {
       status: { type: Sequelize.STRING(20), defaultValue: "draft" },
     });
 
+    await queryInterface.addConstraint("rounds", {
+      fields: ["event_id", "sequence"],
+      type: "unique",
+      name: "unique_sequence_per_event",
+    });
+
     // Motions
     await queryInterface.createTable("motions", {
       id: { type: Sequelize.INTEGER, primaryKey: true, autoIncrement: true },
