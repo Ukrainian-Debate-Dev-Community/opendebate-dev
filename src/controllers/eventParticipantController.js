@@ -66,12 +66,29 @@ const addParticipant = async (req, res, next) => {
 const getEventParticipants = async (req, res, next) => {
   try {
     const eventId = req.params.eventId;
-    const participants = await EventParticipant.findAll({
+
+    // pagination variables
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 50;
+    const offset = (page - 1) * limit;
+
+    const { count, rows } = await EventParticipant.findAndCountAll({
       where: { event_id: eventId },
       attributes: { exclude: ["claim_token_hash"] }, // no tokens
+      limit: limit,
+      offset: offset,
+      order: [["id", "ASC"]],
     });
 
-    res.status(200).json({ status: "success", data: participants });
+    res.status(200).json({
+      status: "success",
+      data: {
+        total_participants: count,
+        total_pages: Math.ceil(count / limit),
+        current_page: page,
+        participants: rows,
+      },
+    });
   } catch (error) {
     next(error);
   }

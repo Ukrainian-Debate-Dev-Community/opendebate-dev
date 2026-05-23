@@ -1,13 +1,17 @@
 const { Sequelize } = require("sequelize");
 require("dotenv").config();
 
+const env = process.env.NODE_ENV || "development";
+const targetDatabase =
+  env === "test" ? process.env.DB_TEST : process.env.DB_DATABASE;
+
 const sequelize = new Sequelize({
   dialect: "postgres",
   host: process.env.DB_HOST,
   port: process.env.DB_PORT || 5432,
   username: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  database: process.env.DB_DATABASE,
+  database: targetDatabase,
   logging: false,
   define: { timestamps: false, freezeTableName: true },
 });

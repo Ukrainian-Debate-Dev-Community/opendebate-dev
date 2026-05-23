@@ -125,4 +125,6 @@ process.on("uncaughtException", (err) => {
 });
 /* eslint-enable n/no-process-exit, promise/catch-or-return */
 
-startServer();
+if (require.main === module) {
+  startServer();
+}

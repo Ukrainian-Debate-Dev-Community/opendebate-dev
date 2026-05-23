@@ -16,7 +16,16 @@ module.exports = (sequelize) => {
         },
       },
     },
-    { tableName: "rounds" },
+    {
+      tableName: "rounds",
+      indexes: [
+        {
+          unique: true,
+          fields: ["event_id", "sequence"],
+          name: "unique_sequence_per_event",
+        },
+      ],
+    },
   );
 
   Round.associate = (models) => {

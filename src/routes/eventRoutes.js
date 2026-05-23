@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const eventController = require("../controllers/eventController");
+const roundController = require("../controllers/roundController");
 const {
   verifyToken,
   restrictToOwnOrg,
@@ -17,6 +18,10 @@ router.use(verifyToken);
 router.use("/:eventId/motions", motionRoutes);
 router.use("/:eventId/participants", participantRoutes);
 router.use("/:eventId/organizers", organizerRoutes);
+
+// creating round and reading all
+router.get("/:eventId/rounds", roundController.getEventRounds);
+router.post("/:eventId/rounds", restrictToOwnOrg, roundController.createRound);
 
 // event CRUD
 router.get(

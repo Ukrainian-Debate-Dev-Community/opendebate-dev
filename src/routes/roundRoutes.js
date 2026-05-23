@@ -2,12 +2,18 @@ const express = require("express");
 const router = express.Router();
 const teamController = require("../controllers/teamController");
 const roomController = require("../controllers/roomController");
+const roundController = require("../controllers/roundController");
 const {
   verifyToken,
   restrictToOwnOrg,
 } = require("../middleware/authMiddleware");
 
 router.use(verifyToken);
+
+// rounds
+router.get("/:roundId", roundController.getRoundById);
+router.put("/:roundId", restrictToOwnOrg, roundController.updateRound);
+router.delete("/:roundId", restrictToOwnOrg, roundController.deleteRound);
 
 // teams
 router.get("/:roundId/teams", teamController.getRoundTeams);
