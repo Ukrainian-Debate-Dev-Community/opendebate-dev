@@ -27,4 +27,10 @@ module.exports = [
       'no-unused-vars': 'off',
     },
   },
+  {
+    files: ['tests/**/*.js'],
+    languageOptions: {
+      globals: { ...globals.node, ...globals.jest },
+    },
+  },
 ];
