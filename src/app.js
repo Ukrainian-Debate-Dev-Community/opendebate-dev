@@ -128,3 +128,5 @@ process.on("uncaughtException", (err) => {
 if (require.main === module) {
   startServer();
 }
+
+module.exports = app;
