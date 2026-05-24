@@ -2,7 +2,6 @@ const request = require("supertest");
 const app = require("../src/app");
 const { sequelize, User } = require("../src/models");
 const bcrypt = require("bcryptjs");
-const crypto = require("crypto");
 
 describe("User API Endpoints", () => {
   let userToken;

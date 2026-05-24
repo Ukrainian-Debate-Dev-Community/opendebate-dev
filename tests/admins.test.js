@@ -7,7 +7,6 @@ describe("Admin API Endpoints", () => {
   let adminToken;
   let regularToken;
   let targetUserId;
-  let alreadyAdminId;
 
   beforeAll(async () => {
     // wipe and sync
