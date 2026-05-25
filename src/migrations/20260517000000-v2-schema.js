@@ -96,7 +96,7 @@ module.exports = {
         type: Sequelize.INTEGER,
         allowNull: false,
         references: { model: "organisations", key: "id" },
-        onDelete: "CASCADE",
+        onDelete: "RESTRICT",
       },
       name: { type: Sequelize.STRING(120), allowNull: false },
       start_date: { type: Sequelize.DATE, allowNull: true },

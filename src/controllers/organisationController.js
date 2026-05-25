@@ -122,7 +122,14 @@ const deleteOrganisation = async (req, res, next) => {
     // wrap the multi-write soft-delete in a transaction so a failure
     // between the `status` flip and the `is_deleted` flip can't leave the
     // row in a half-deactivated state.
-    if (error.name === "SequelizeForeignKeyConstraintError") {
+
+    const isForeignKeyError =
+      error.name === "SequelizeForeignKeyConstraintError" ||
+      error.message.includes("events_organisation_id_fkey");
+    // found out that my local DB throws a message with the error name inside, but not the actual error
+    // so, I will simply leave it here.
+
+    if (isForeignKeyError) {
       try {
         await sequelize.transaction(async (t) => {
           const orgToSoftDelete = await Organisation.findByPk(
@@ -158,7 +165,8 @@ const addOwner = async (req, res, next) => {
       throw new AppError("Please provide the targetUserId.", 400);
 
     const targetUser = await User.findByPk(targetUserId);
-    if (!targetUser) throw new AppError("User not found.", 404);
+    if (!targetUser || targetUser.is_deleted)
+      throw new AppError("User not found.", 404);
 
     const existingOwner = await Owner.findOne({
       where: { user_id: targetUserId, organisation_id: organisationId },

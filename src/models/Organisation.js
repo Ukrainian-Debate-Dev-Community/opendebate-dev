@@ -33,7 +33,7 @@ module.exports = (sequelize) => {
     });
     Organisation.hasMany(models.Event, {
       foreignKey: "organisation_id",
-      onDelete: "CASCADE",
+      onDelete: "RESTRICT",
     });
   };
 

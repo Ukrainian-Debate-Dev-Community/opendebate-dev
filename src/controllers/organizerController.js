@@ -34,10 +34,11 @@ const addOrganizer = async (req, res, next) => {
     }
 
     const event = await Event.findByPk(eventId);
-    if (!event) throw new AppError("Event not found.", 404);
+    if (!event || event.status == "completed" || event.is_deleted)
+      throw new AppError("Event not found.", 404);
 
     const user = await User.findByPk(targetUserId);
-    if (!user) throw new AppError("User not found.", 404);
+    if (!user || user.is_deleted) throw new AppError("User not found.", 404);
 
     const existingRole = await Organizer.findOne({
       where: { event_id: eventId, user_id: targetUserId },
