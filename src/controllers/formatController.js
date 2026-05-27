@@ -103,16 +103,10 @@ const updateFormat = async (req, res, next) => {
       }
     }
 
-    if (
-      teams_per_room !== undefined &&
-      !isPositiveInt(teams_per_room)
-    ) {
+    if (teams_per_room !== undefined && !isPositiveInt(teams_per_room)) {
       throw new AppError("teams_per_room must be a positive integer.", 400);
     }
-    if (
-      speakers_per_team !== undefined &&
-      !isPositiveInt(speakers_per_team)
-    ) {
+    if (speakers_per_team !== undefined && !isPositiveInt(speakers_per_team)) {
       throw new AppError("speakers_per_team must be a positive integer.", 400);
     }
 
@@ -148,7 +142,12 @@ const deleteFormat = async (req, res, next) => {
       .status(200)
       .json({ status: "success", message: "Format deleted successfully." });
   } catch (error) {
-    if (error.name === "SequelizeForeignKeyConstraintError") {
+    const isForeignKeyError =
+      error.name === "SequelizeForeignKeyConstraintError" ||
+      error.message.includes("rooms_format_id_fkey");
+    // same problem as in org-event relation
+
+    if (isForeignKeyError) {
       return next(
         new AppError(
           "Cannot delete format. It is currently being used by existing rooms.",
