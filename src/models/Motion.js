@@ -5,16 +5,21 @@ module.exports = (sequelize) => {
     "Motion",
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-      session_id: { type: DataTypes.INTEGER, allowNull: false },
+      event_id: { type: DataTypes.INTEGER, allowNull: false },
       motion_text: { type: DataTypes.TEXT, allowNull: false },
       infoslide: { type: DataTypes.TEXT, allowNull: true },
       is_released: { type: DataTypes.BOOLEAN, defaultValue: false },
+      is_deleted: { type: DataTypes.BOOLEAN, defaultValue: false },
     },
     { tableName: "motions" },
   );
 
   Motion.associate = (models) => {
-    Motion.belongsTo(models.Session, { foreignKey: "session_id" });
+    Motion.belongsTo(models.Event, { foreignKey: "event_id" });
+    Motion.hasMany(models.Room, {
+      foreignKey: "motion_id",
+      onDelete: "SET NULL",
+    });
   };
 
   return Motion;

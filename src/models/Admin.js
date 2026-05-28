@@ -1,7 +1,7 @@
 const { DataTypes } = require("sequelize");
 
 module.exports = (sequelize) => {
-  return sequelize.define(
+  const Admin = sequelize.define(
     "Admin",
     {
       user_id: { type: DataTypes.INTEGER, primaryKey: true },
@@ -9,4 +9,10 @@ module.exports = (sequelize) => {
     },
     { tableName: "admins" },
   );
+
+  Admin.associate = (models) => {
+    Admin.belongsTo(models.User, { foreignKey: "user_id" });
+  };
+
+  return Admin;
 };

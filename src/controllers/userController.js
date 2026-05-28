@@ -1,15 +1,20 @@
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
-const { User } = require("../models");
+const { User, Admin, sequelize } = require("../models");
 const AppError = require("../utils/AppError");
 
-// helper to sign tokens with user_id
-const signToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
+// helper to sign tokens with user_id (and isAdmin so middleware can skip an Admin lookup per request)
+const signToken = (id, isAdmin = false) => {
+  return jwt.sign({ id, isAdmin }, process.env.JWT_SECRET, {
     expiresIn: process.env.JWT_EXPIRES_IN,
   });
 };
+
+// constant-time login — bcrypt compare against a fixed hash when the user lookup misses,
+// so response timing doesn't reveal whether the username exists.
+const DUMMY_BCRYPT_HASH =
+  "$2b$10$CwTycUXWue0Thq9StjUM0uJ8L0PemoTPMI4Co.s48d8/CYUjFp3KO";
 
 const createUser = async (req, res, next) => {
   try {
@@ -54,6 +59,7 @@ const login = async (req, res, next) => {
     const user = await User.findOne({ where: { username } });
 
     if (!user || user.is_deleted) {
+      await bcrypt.compare(password, DUMMY_BCRYPT_HASH);
       throw new AppError("Invalid credentials.", 401);
     }
 
@@ -63,7 +69,8 @@ const login = async (req, res, next) => {
       throw new AppError("Invalid credentials.", 401);
     }
 
-    const token = signToken(user.id);
+    const adminRecord = await Admin.findOne({ where: { user_id: user.id } });
+    const token = signToken(user.id, !!adminRecord);
 
     res.status(200).json({
       status: "success",
@@ -151,21 +158,23 @@ const deleteUser = async (req, res, next) => {
 
     res.status(204).json({ status: "success", data: null });
   } catch (error) {
-    // if SQL Server blocked it due to historical data => Soft Delete
+    // if FK constraint blocked the hard delete, wrap the soft-delete
+    // anonymisation in a transaction so a mid-flight failure can't leave the
+    // row half-anonymised (e.g. is_deleted flipped but username unchanged).
     if (error.name === "SequelizeForeignKeyConstraintError") {
       try {
-        const userToSoftDelete = await User.findByPk(req.params.id);
+        await sequelize.transaction(async (t) => {
+          const userToSoftDelete = await User.findByPk(req.user.id, {
+            lock: t.LOCK.UPDATE,
+            transaction: t,
+          });
 
-        // flip the state
-        userToSoftDelete.is_deleted = true;
+          userToSoftDelete.is_deleted = true;
+          userToSoftDelete.username = `deleted_user_${crypto.randomUUID()}`;
+          userToSoftDelete.password = crypto.randomBytes(32).toString("hex");
 
-        // replace the username to the deleted_user with a random UUID
-        userToSoftDelete.username = `deleted_user_${crypto.randomUUID()}`;
-
-        // regenerate the password so the account can never be accessed again
-        userToSoftDelete.password = crypto.randomBytes(32).toString("hex");
-
-        await userToSoftDelete.save();
+          await userToSoftDelete.save({ transaction: t });
+        });
 
         return res.status(200).json({
           status: "success",

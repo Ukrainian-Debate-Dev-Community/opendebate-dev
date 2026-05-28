@@ -1,28 +1,24 @@
-const { Motion, Session, Owner } = require("../models");
+const { Motion, Event } = require("../models");
 const AppError = require("../utils/AppError");
+const { hasEventPrivilege } = require("../middleware/authMiddleware");
 
 const createMotion = async (req, res, next) => {
   try {
-    const sessionId = req.params.sessionId;
+    const eventId = req.params.eventId;
     const { motion_text, infoslide, is_released } = req.body;
 
-    if (!motion_text) {
+    if (!motion_text)
       throw new AppError("Please provide the motion_text.", 400);
-    }
 
-    // only one motion exists per session
-    const existingMotion = await Motion.findOne({
-      where: { session_id: sessionId },
-    });
-    if (existingMotion) {
-      throw new AppError(
-        "A motion already exists for this session. Please update it instead.",
-        409,
-      );
+    // verify the event exists (and isn't soft-deleted) before insert,
+    // so we return a clean 404 instead of a DB FK violation.
+    const event = await Event.findByPk(eventId);
+    if (!event || event.is_deleted) {
+      throw new AppError("Event not found.", 404);
     }
 
     const newMotion = await Motion.create({
-      session_id: sessionId,
+      event_id: eventId,
       motion_text,
       infoslide: infoslide || null,
       is_released: is_released || false,
@@ -34,45 +30,71 @@ const createMotion = async (req, res, next) => {
   }
 };
 
-const getMotion = async (req, res, next) => {
+const getMotions = async (req, res, next) => {
   try {
-    const sessionId = req.params.sessionId;
-    const motion = await Motion.findOne({ where: { session_id: sessionId } });
+    const eventId = req.params.eventId;
+    const motions = await Motion.findAll({
+      where: { event_id: eventId, is_deleted: false },
+    });
 
-    if (!motion) throw new AppError("No motion found for this session.", 404);
+    if (!motions || motions.length === 0) {
+      throw new AppError("No motions found for this event.", 404);
+    }
 
-    // if it's released => anyone can see it
+    // reuse shared privilege check instead of re-implementing owner/organiser
+    // climbing here. Admin/owner/organiser see unreleased motions in full.
+    const isAuthorisedViewer = await hasEventPrivilege(
+      req.user.id,
+      req.user.isAdmin,
+      Number(eventId),
+    );
+
+    const processedMotions = motions.map((motion) => {
+      if (motion.is_released || isAuthorisedViewer) {
+        return motion;
+      }
+      return {
+        id: motion.id,
+        event_id: motion.event_id,
+        motion_text: "Motion will be revealed later.",
+        infoslide: null,
+        is_released: false,
+      };
+    });
+
+    res.status(200).json({ status: "success", data: processedMotions });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getMotionById = async (req, res, next) => {
+  try {
+    const { eventId, motionId } = req.params;
+    const motion = await Motion.findOne({
+      where: { id: motionId, event_id: eventId, is_deleted: false },
+    });
+
+    if (!motion) throw new AppError("Motion not found.", 404);
+
     if (motion.is_released) {
       return res.status(200).json({ status: "success", data: motion });
     }
 
-    // if it is NOT released => check if the user is an Admin or the Holding Owner
-    let isAuthorizedViewer = false;
+    const isAuthorisedViewer = await hasEventPrivilege(
+      req.user.id,
+      req.user.isAdmin,
+      Number(eventId),
+    );
 
-    if (req.user.isAdmin) {
-      isAuthorizedViewer = true;
-    } else {
-      const session = await Session.findByPk(sessionId);
-      const isOwner = await Owner.findOne({
-        where: { user_id: req.user.id, holding_id: session.holding_id },
-      });
-      if (isOwner) isAuthorizedViewer = true;
-    }
-
-    if (isAuthorizedViewer) {
+    if (isAuthorisedViewer) {
       return res.status(200).json({ status: "success", data: motion });
     }
 
-    // if default User requesting unreleased motion => redact data
-    const redactedMotion = {
-      id: motion.id,
-      session_id: motion.session_id,
-      motion_text: "Motion will be revealed later.",
-      infoslide: null,
-      is_released: false,
-    };
-
-    res.status(200).json({ status: "success", data: redactedMotion });
+    throw new AppError(
+      "You do not have permission to view this unreleased motion.",
+      403,
+    );
   } catch (error) {
     next(error);
   }
@@ -80,11 +102,12 @@ const getMotion = async (req, res, next) => {
 
 const updateMotion = async (req, res, next) => {
   try {
-    const sessionId = req.params.sessionId;
+    const { motionId } = req.params;
     const { motion_text, infoslide, is_released } = req.body;
 
-    const motion = await Motion.findOne({ where: { session_id: sessionId } });
-    if (!motion) throw new AppError("Motion not found.", 404);
+    const motion = await Motion.findByPk(motionId);
+    if (!motion || motion.is_deleted)
+      throw new AppError("Motion not found.", 404);
 
     motion.motion_text = motion_text || motion.motion_text;
     motion.infoslide = infoslide !== undefined ? infoslide : motion.infoslide;
@@ -100,12 +123,17 @@ const updateMotion = async (req, res, next) => {
 
 const deleteMotion = async (req, res, next) => {
   try {
-    const sessionId = req.params.sessionId;
-    const motion = await Motion.findOne({ where: { session_id: sessionId } });
+    const { motionId } = req.params;
+    const motion = await Motion.findByPk(motionId);
 
-    if (!motion) throw new AppError("Motion not found.", 404);
+    if (!motion || motion.is_deleted)
+      throw new AppError("Motion not found.", 404);
 
-    await motion.destroy();
+    // soft-delete so rooms that used this motion preserve their
+    // historical reference (the FK is SET NULL on hard delete, which would
+    // erase which motion was actually debated).
+    motion.is_deleted = true;
+    await motion.save();
 
     res
       .status(200)
@@ -117,7 +145,8 @@ const deleteMotion = async (req, res, next) => {
 
 module.exports = {
   createMotion,
-  getMotion,
+  getMotions,
+  getMotionById,
   updateMotion,
   deleteMotion,
 };
