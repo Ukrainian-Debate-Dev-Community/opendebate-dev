@@ -26,7 +26,7 @@ module.exports = (sequelize) => {
     Event.belongsTo(models.Organisation, { foreignKey: "organisation_id" });
     Event.hasMany(models.Round, {
       foreignKey: "event_id",
-      onDelete: "CASCADE",
+      onDelete: "RESTRICT",
     });
     Event.hasMany(models.EventParticipant, {
       foreignKey: "event_id",

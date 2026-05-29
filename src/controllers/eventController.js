@@ -71,7 +71,13 @@ const deleteEvent = async (req, res, next) => {
   } catch (error) {
     // wrap the soft-delete fallback in a transaction with a row lock
     // so concurrent deactivations can't race on the `is_deleted` flip.
-    if (error.name === "SequelizeForeignKeyConstraintError") {
+
+    const isForeignKeyError =
+      error.name === "SequelizeForeignKeyConstraintError" ||
+      error.message.includes("rounds_event_id_fkey");
+    // added RESTRICT on round-event and implemented as in previous cases
+
+    if (isForeignKeyError) {
       try {
         await sequelize.transaction(async (t) => {
           const eventToSoftDelete = await Event.findByPk(req.params.eventId, {
