@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "nodemon src/app.js",
     "lint": "eslint .",
-    "test": "cross-env NODE_ENV=test jest --runInBand"
+    "test": "cross-env NODE_ENV=test jest --runInBand",
+    "lifecycle": "cross-env NODE_ENV=test jest tests/lifecycle.test.js"
   },
   "repository": {
     "type": "git",

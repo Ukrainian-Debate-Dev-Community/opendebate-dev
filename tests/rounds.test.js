@@ -11,7 +11,8 @@ const {
 const jwt = require("jsonwebtoken");
 
 describe("Round API Endpoints", () => {
-  let token;
+  let ownerToken;
+  let randomToken;
   let activeEventId;
   let completedEventId;
   let createdRoundId;
@@ -21,8 +22,15 @@ describe("Round API Endpoints", () => {
     // wipe and sync
     await sequelize.sync({ force: true });
 
+    // create an Owner User
     const user = await User.create({
-      username: "test_organiser",
+      username: "owner",
+      password: "hashedpassword123",
+    });
+
+    // create a Random User
+    const randomUser = await User.create({
+      username: "random_user",
       password: "hashedpassword123",
     });
 
@@ -46,10 +54,17 @@ describe("Round API Endpoints", () => {
     });
     completedEventId = completedEvent.id;
 
-    // generate valid JWT
-    token = jwt.sign({ id: user.id }, process.env.JWT_SECRET || "testsecret", {
-      expiresIn: "1h",
-    });
+    ownerToken = jwt.sign(
+      { id: user.id, isAdmin: false },
+      process.env.JWT_SECRET || "testsecret",
+      { expiresIn: "1h" },
+    );
+
+    randomToken = jwt.sign(
+      { id: randomUser.id, isAdmin: false },
+      process.env.JWT_SECRET || "testsecret",
+      { expiresIn: "1h" },
+    );
   });
 
   // clean up database connection after tests
@@ -62,7 +77,7 @@ describe("Round API Endpoints", () => {
     it("should successfully create a round for an active event", async () => {
       const res = await request(app)
         .post(`/api/events/${activeEventId}/rounds`)
-        .set("Authorization", `Bearer ${token}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
         .send({
           name: "Round 1",
           sequence: 1,
@@ -79,7 +94,7 @@ describe("Round API Endpoints", () => {
     it("should return 400 if required fields are missing", async () => {
       const res = await request(app)
         .post(`/api/events/${activeEventId}/rounds`)
-        .set("Authorization", `Bearer ${token}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
         .send({ name: "Round 2" }); // no sequence
 
       expect(res.statusCode).toEqual(400);
@@ -89,7 +104,7 @@ describe("Round API Endpoints", () => {
     it("should return 409 if the sequence already exists for this event", async () => {
       const res = await request(app)
         .post(`/api/events/${activeEventId}/rounds`)
-        .set("Authorization", `Bearer ${token}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
         .send({
           name: "Duplicate Round 1",
           sequence: 1,
@@ -101,7 +116,7 @@ describe("Round API Endpoints", () => {
     it("should return 403 if trying to add a round to a completed event", async () => {
       const res = await request(app)
         .post(`/api/events/${completedEventId}/rounds`)
-        .set("Authorization", `Bearer ${token}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
         .send({
           name: "Post-Tournament Round",
           sequence: 1,
@@ -116,11 +131,26 @@ describe("Round API Endpoints", () => {
     it("should return 404 if the parent event does not exist", async () => {
       const res = await request(app)
         .post("/api/events/999999/rounds")
-        .set("Authorization", `Bearer ${token}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
         .send({ name: "Ghost Round", sequence: 1 });
 
       expect(res.statusCode).toEqual(404);
       expect(res.body.message).toMatch(/Event not found/i);
+    });
+
+    it("should return 403 if a random user attempts to create a round", async () => {
+      const res = await request(app)
+        .post(`/api/events/${activeEventId}/rounds`)
+        .set("Authorization", `Bearer ${randomToken}`)
+        .send({
+          name: "Random Round",
+          sequence: 99999,
+        });
+
+      expect(res.statusCode).toEqual(403);
+      expect(res.body.message).toMatch(
+        /You do not have Organiser or Owner privileges for this event/i,
+      );
     });
   });
 
@@ -141,7 +171,7 @@ describe("Round API Endpoints", () => {
 
       const res = await request(app)
         .get(`/api/events/${activeEventId}/rounds`)
-        .set("Authorization", `Bearer ${token}`);
+        .set("Authorization", `Bearer ${randomToken}`); // no restrictions on the route, so should work
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.data.length).toBe(3);
@@ -156,7 +186,7 @@ describe("Round API Endpoints", () => {
     it("should retrieve a specific round by its ID", async () => {
       const res = await request(app)
         .get(`/api/rounds/${createdRoundId}`)
-        .set("Authorization", `Bearer ${token}`);
+        .set("Authorization", `Bearer ${randomToken}`); // no restrictions on the route, so should work
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.data.id).toBe(createdRoundId);
@@ -165,7 +195,7 @@ describe("Round API Endpoints", () => {
     it("should return 404 for a non-existent round", async () => {
       const res = await request(app)
         .get("/api/rounds/999999")
-        .set("Authorization", `Bearer ${token}`);
+        .set("Authorization", `Bearer ${ownerToken}`);
 
       expect(res.statusCode).toEqual(404);
     });
@@ -173,10 +203,22 @@ describe("Round API Endpoints", () => {
 
   // PUT part
   describe("PUT /api/rounds/:roundId", () => {
+    it("should return 403 if a random user attempts to update a round", async () => {
+      const res = await request(app)
+        .put(`/api/rounds/${createdRoundId}`)
+        .set("Authorization", `Bearer ${randomToken}`)
+        .send({ name: "Random Round Update" });
+
+      expect(res.statusCode).toEqual(403);
+      expect(res.body.message).toMatch(
+        /You do not have Organiser or Owner privileges for this event/i,
+      );
+    });
+
     it("should prevent sequence updates that cause a collision", async () => {
       const res = await request(app)
         .put(`/api/rounds/${createdRoundId}`)
-        .set("Authorization", `Bearer ${token}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
         .send({ sequence: 2 }); // sequence 2 was created in the GET part
 
       expect(res.statusCode).toEqual(409);
@@ -186,7 +228,7 @@ describe("Round API Endpoints", () => {
     it("should update round details successfully", async () => {
       const res = await request(app)
         .put(`/api/rounds/${createdRoundId}`)
-        .set("Authorization", `Bearer ${token}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
         .send({ status: "in_progress" });
 
       expect(res.statusCode).toEqual(200);
@@ -201,7 +243,7 @@ describe("Round API Endpoints", () => {
 
       const res = await request(app)
         .put(`/api/rounds/${createdRoundId}`)
-        .set("Authorization", `Bearer ${token}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
         .send({ sequence: 5 });
 
       expect(res.statusCode).toEqual(403);
@@ -218,7 +260,7 @@ describe("Round API Endpoints", () => {
 
       const res = await request(app)
         .put(`/api/rounds/${createdRoundId}`)
-        .set("Authorization", `Bearer ${token}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
         .send({ name: "New Name" });
 
       expect(res.statusCode).toEqual(403);
@@ -228,7 +270,7 @@ describe("Round API Endpoints", () => {
     it("should return 404 if trying to update a non-existent round", async () => {
       const res = await request(app)
         .put("/api/rounds/999999")
-        .set("Authorization", `Bearer ${token}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
         .send({ name: "Nowhere" });
 
       expect(res.statusCode).toEqual(404);
@@ -237,10 +279,21 @@ describe("Round API Endpoints", () => {
 
   // DELETE part
   describe("DELETE /api/rounds/:roundId", () => {
+    it("should return 403 if a random user attempts to delete a round", async () => {
+      const res = await request(app)
+        .delete(`/api/rounds/${createdRoundId}`)
+        .set("Authorization", `Bearer ${randomToken}`);
+
+      expect(res.statusCode).toEqual(403);
+      expect(res.body.message).toMatch(
+        /You do not have Organiser or Owner privileges for this event/i,
+      );
+    });
+
     it("should prevent deletion of an active or completed round", async () => {
       const res = await request(app)
         .delete(`/api/rounds/${createdRoundId}`)
-        .set("Authorization", `Bearer ${token}`);
+        .set("Authorization", `Bearer ${ownerToken}`);
 
       expect(res.statusCode).toEqual(403);
       expect(res.body.message).toMatch(/Cannot delete a round/i);
@@ -254,7 +307,7 @@ describe("Round API Endpoints", () => {
 
       const res = await request(app)
         .delete(`/api/rounds/${createdRoundId}`)
-        .set("Authorization", `Bearer ${token}`);
+        .set("Authorization", `Bearer ${ownerToken}`);
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.message).toMatch(/deleted successfully/i);
@@ -267,7 +320,7 @@ describe("Round API Endpoints", () => {
     it("should return 404 if trying to delete a non-existent round", async () => {
       const res = await request(app)
         .delete("/api/rounds/999999")
-        .set("Authorization", `Bearer ${token}`);
+        .set("Authorization", `Bearer ${ownerToken}`);
 
       expect(res.statusCode).toEqual(404);
     });
