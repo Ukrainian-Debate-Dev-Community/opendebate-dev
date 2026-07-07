@@ -320,11 +320,53 @@ module.exports = {
       },
       value: { type: Sequelize.SMALLINT, allowNull: false },
     });
+
+    // Feedbacks
+    await queryInterface.createTable("feedbacks", {
+      id: { type: Sequelize.INTEGER, primaryKey: true, autoIncrement: true },
+      room_id: {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        references: { model: "rooms", key: "id" },
+        onDelete: "CASCADE",
+      },
+      adjudicator_id: {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        references: { model: "event_participants", key: "id" },
+        onDelete: "CASCADE",
+      },
+      issuer_participant_id: {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: { model: "event_participants", key: "id" },
+        onDelete: "CASCADE",
+      },
+      issuer_team_id: {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: { model: "teams", key: "id" },
+        onDelete: "CASCADE",
+      },
+      score: { type: Sequelize.SMALLINT, allowNull: false },
+      comment: { type: Sequelize.TEXT, allowNull: true },
+    });
+
+    // enforce exclusive issuer constraint
+    await queryInterface.sequelize.query(`
+      ALTER TABLE feedbacks
+      ADD CONSTRAINT check_exclusive_issuer
+      CHECK (
+        (issuer_participant_id IS NOT NULL AND issuer_team_id IS NULL) OR
+        (issuer_participant_id IS NULL AND issuer_team_id IS NOT NULL)
+      );
+    `);
   },
 
   async down(queryInterface, Sequelize) {
     // drop all tables
     const v2Tables = [
+      "feedbacks",
       "scores",
       "room_speakers",
       "room_adjudicators",

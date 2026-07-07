@@ -34,6 +34,7 @@ const models = {
   RoomAdjudicator: require("./RoomAdjudicator")(sequelize),
   RoomSpeaker: require("./RoomSpeaker")(sequelize),
   Score: require("./Score")(sequelize),
+  Feedback: require("./Feedback")(sequelize),
 };
 
 Object.values(models).forEach((model) => {

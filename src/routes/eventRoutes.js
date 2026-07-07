@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const eventController = require("../controllers/eventController");
 const roundController = require("../controllers/roundController");
+const feedbackController = require("../controllers/feedbackController");
 const {
   verifyToken,
   restrictToOwnOrg,
@@ -22,6 +23,9 @@ router.use("/:eventId/organizers", organizerRoutes);
 // creating round and reading all
 router.get("/:eventId/rounds", roundController.getEventRounds);
 router.post("/:eventId/rounds", restrictToOwnOrg, roundController.createRound);
+
+// get all feedback entries
+router.get("/:eventId/feedback", feedbackController.getEventFeedback);
 
 // event CRUD
 router.get(

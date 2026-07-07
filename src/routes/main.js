@@ -8,6 +8,7 @@ const formatRoutes = require("./formatRoutes");
 const eventRoutes = require("./eventRoutes");
 const roundRoutes = require("./roundRoutes");
 const roomRoutes = require("./roomRoutes");
+const feedbackRoutes = require("./feedbackRoutes");
 
 router.use("/users", userRoutes);
 router.use("/admins", adminRoutes);
@@ -17,5 +18,7 @@ router.use("/events", eventRoutes);
 
 router.use("/rounds", roundRoutes);
 router.use("/rooms", roomRoutes);
+
+router.use("/feedback", feedbackRoutes);
 
 module.exports = router;
