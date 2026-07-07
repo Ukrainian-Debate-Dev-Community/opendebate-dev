@@ -16,6 +16,7 @@ const submitScores = async (req, res, next) => {
   try {
     const roomId = req.params.roomId;
     const userId = req.user.id; // the authenticated user
+    const isAdmin = req.user.isAdmin;
     const { teamRankings, speakerScores } = req.body;
 
     /* Expected Payload Format:
@@ -24,16 +25,10 @@ const submitScores = async (req, res, next) => {
     */
 
     if (!Array.isArray(teamRankings) || teamRankings.length === 0) {
-      throw new AppError(
-        "teamRankings must be a non-empty array.",
-        400,
-      );
+      throw new AppError("teamRankings must be a non-empty array.", 400);
     }
     if (!Array.isArray(speakerScores) || speakerScores.length === 0) {
-      throw new AppError(
-        "speakerScores must be a non-empty array.",
-        400,
-      );
+      throw new AppError("speakerScores must be a non-empty array.", 400);
     }
 
     // prevent duplicate Teams
@@ -93,20 +88,21 @@ const submitScores = async (req, res, next) => {
       }
     }
 
-    // the requester is the Chair of this room
+    // now fetch the Chair's ID and compare to the requester's
     const adjudicatorRecord = await RoomAdjudicator.findOne({
       where: { room_id: roomId, role: "chair" },
       include: [
         {
           model: EventParticipant,
-          where: { user_id: userId },
-          required: true,
+          attributes: ["user_id"],
         },
       ],
       transaction,
     });
 
-    if (!adjudicatorRecord) {
+    const isChair = adjudicatorRecord.EventParticipant.user_id === userId;
+
+    if (!isChair && !isAdmin) {
       throw new AppError(
         "Unauthorised: Only the designated Chair can submit the final ballot.",
         403,

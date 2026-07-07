@@ -153,7 +153,7 @@ module.exports = {
         type: Sequelize.INTEGER,
         allowNull: false,
         references: { model: "events", key: "id" },
-        onDelete: "CASCADE",
+        onDelete: "RESTRICT",
       },
       name: { type: Sequelize.STRING(64), allowNull: false },
       sequence: { type: Sequelize.SMALLINT, allowNull: false },

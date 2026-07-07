@@ -10,7 +10,6 @@ const {
 
 router.use(verifyToken);
 
-// inherited path /api/rooms/:roomId
 router.delete("/:roomId", restrictToOwnOrg, roomController.deleteRoom);
 router.post("/:roomId/scores", restrictToChair, scoreController.submitScores);
 
