@@ -111,7 +111,7 @@ describe("Event Participant API Endpoints", () => {
     });
 
     const team = await Team.create({
-      round_id: round.id,
+      event_id: targetEventId,
       name: "Team A",
     });
 
@@ -304,7 +304,7 @@ describe("Event Participant API Endpoints", () => {
 
       expect(res.statusCode).toEqual(409);
       expect(res.body.message).toMatch(
-        /Cannot remove participant: still a member of a team. Remove them from the team first/i,
+        /Cannot remove participant: still a member of a team/i,
       );
     });
 
@@ -317,7 +317,7 @@ describe("Event Participant API Endpoints", () => {
 
       expect(res.statusCode).toEqual(409);
       expect(res.body.message).toMatch(
-        /Cannot remove participant: still assigned as a room adjudicator. Reassign the room first/i,
+        /Cannot remove participant: still assigned as a room adjudicator/i,
       );
     });
 

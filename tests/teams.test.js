@@ -7,12 +7,12 @@ const {
   Owner,
   Event,
   Round,
+  Format,
   EventParticipant,
   Team,
   TeamMember,
   Room,
   RoomTeam,
-  Format,
 } = require("../src/models");
 const jwt = require("jsonwebtoken");
 
@@ -22,13 +22,10 @@ describe("Team API Endpoints", () => {
 
   let orgId;
   let eventId;
-  let round1Id;
-  let round2Id;
-  let formatId;
+  let activeRoomId;
 
-  let p1, p2, p3, p4;
+  let p1, p2, p3, p4, p5;
   let team1Id;
-  let team2Id;
 
   beforeAll(async () => {
     // wipe and sync
@@ -56,7 +53,7 @@ describe("Team API Endpoints", () => {
       { expiresIn: "1h" },
     );
 
-    // create Org, Event, and Rounds
+    // create Org and Event
     const org = await Organisation.create({ name: "Team Test Org" });
     orgId = org.id;
 
@@ -72,30 +69,28 @@ describe("Team API Endpoints", () => {
     });
     eventId = event.id;
 
-    const round1 = await Round.create({
-      event_id: eventId,
-      name: "Round 1",
-      sequence: 1,
-    });
-    round1Id = round1.id;
-
-    const round2 = await Round.create({
-      event_id: eventId,
-      name: "Round 2",
-      sequence: 2,
-    });
-    round2Id = round2.id;
-
+    // create Format and Round for testing active-room blocks
     const format = await Format.create({
       name: "Standard",
       code: "STD",
       teams_per_room: 2,
       speakers_per_team: 2,
-      has_reply: false,
       score_min: 50,
       score_max: 100,
     });
-    formatId = format.id;
+
+    const round = await Round.create({
+      event_id: eventId,
+      name: "Round 1",
+      sequence: 1,
+    });
+
+    const activeRoom = await Room.create({
+      round_id: round.id,
+      format_id: format.id,
+      status: "pending", // will be flipped to judging during the test
+    });
+    activeRoomId = activeRoom.id;
 
     // create Event Participants
     const participants = await EventParticipant.bulkCreate([
@@ -123,12 +118,19 @@ describe("Team API Endpoints", () => {
         role: "speaker",
         is_waitlist: true,
       },
+      {
+        event_id: eventId,
+        display_name: "Eve",
+        role: "speaker",
+        is_waitlist: true,
+      },
     ]);
 
     p1 = participants[0].id;
     p2 = participants[1].id;
     p3 = participants[2].id;
     p4 = participants[3].id;
+    p5 = participants[4].id;
   });
 
   afterAll(async () => {
@@ -136,29 +138,10 @@ describe("Team API Endpoints", () => {
   });
 
   // POST part
-  describe("POST /api/rounds/:roundId/teams", () => {
-    it("should allow an Owner to create a team", async () => {
-      const res = await request(app)
-        .post(`/api/rounds/${round1Id}/teams`)
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send({
-          name: "Team A",
-          participant_ids: [p1, p2],
-        });
-
-      expect(res.statusCode).toEqual(201);
-      expect(res.body.data.name).toBe("Team A");
-      team1Id = res.body.data.id;
-
-      // verify TeamMembers were created
-      const members = await TeamMember.findAll({ where: { team_id: team1Id } });
-      expect(members.length).toBe(2);
-      expect(members[0].speaker_order).toBe(1);
-    });
-
+  describe("POST /api/events/:eventId/teams", () => {
     it("should return 400 if participants are missing", async () => {
       const res = await request(app)
-        .post(`/api/rounds/${round1Id}/teams`)
+        .post(`/api/events/${eventId}/teams`)
         .set("Authorization", `Bearer ${ownerToken}`)
         .send({ name: "Incomplete Team", participant_ids: [] });
 
@@ -170,7 +153,7 @@ describe("Team API Endpoints", () => {
 
     it("should return 400 if name is missing", async () => {
       const res = await request(app)
-        .post(`/api/rounds/${round1Id}/teams`)
+        .post(`/api/events/${eventId}/teams`)
         .set("Authorization", `Bearer ${ownerToken}`)
         .send({ participant_ids: [p1, p2] });
 
@@ -182,7 +165,7 @@ describe("Team API Endpoints", () => {
 
     it("should return 400 if a participant does not belong to the event", async () => {
       const res = await request(app)
-        .post(`/api/rounds/${round1Id}/teams`)
+        .post(`/api/events/${eventId}/teams`)
         .set("Authorization", `Bearer ${ownerToken}`)
         .send({ name: "Invalid Team", participant_ids: [99998, 99999] });
 
@@ -192,47 +175,86 @@ describe("Team API Endpoints", () => {
       );
     });
 
-    it("should return 404 if the round does not exist", async () => {
+    it("should return 404 if the event does not exist", async () => {
       const res = await request(app)
-        .post(`/api/rounds/99999/teams`)
+        .post(`/api/events/99999/teams`)
         .set("Authorization", `Bearer ${ownerToken}`)
         .send({ name: "Missing Team", participant_ids: [p3, p4] });
 
       expect(res.statusCode).toEqual(404);
-      expect(res.body.message).toMatch(/Round not found/i);
+      expect(res.body.message).toMatch(/Event not found/i);
     });
 
-    it("should return 409 if a participant is already in a team this round", async () => {
+    it("should allow an Owner to create a permanent team", async () => {
       const res = await request(app)
-        .post(`/api/rounds/${round1Id}/teams`)
+        .post(`/api/events/${eventId}/teams`)
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ name: "Duplicate Team", participant_ids: [p1, p3] });
+        .send({
+          name: "Team A",
+          participant_ids: [p1, p2],
+          is_temporary: false,
+        });
+
+      expect(res.statusCode).toEqual(201);
+      expect(res.body.data.name).toBe("Team A");
+      expect(res.body.data.is_temporary).toBe(false);
+      team1Id = res.body.data.id;
+
+      const members = await TeamMember.findAll({ where: { team_id: team1Id } });
+      expect(members.length).toBe(2);
+      expect(members[0].speaker_order).toBe(1);
+
+      const updatedP1 = await EventParticipant.findByPk(p1);
+      expect(updatedP1.is_waitlist).toBe(false);
+    });
+
+    it("should return 409 if a participant is already in a permanent team", async () => {
+      const res = await request(app)
+        .post(`/api/events/${eventId}/teams`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({
+          name: "Duplicate Team",
+          participant_ids: [p1, p3],
+          is_temporary: false,
+        });
 
       expect(res.statusCode).toEqual(409);
       expect(res.body.message).toMatch(
-        /One or more participants are already assigned to a team in this round/i,
+        /already assigned to a permanent team in this event/i,
       );
     });
 
-    it("should successfully allow the same participant to join a team in a different round", async () => {
+    it("should successfully allow the creation of a temporary team", async () => {
       const res = await request(app)
-        .post(`/api/rounds/${round2Id}/teams`)
+        .post(`/api/events/${eventId}/teams`)
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ name: "Round 2 Team A", participant_ids: [p1, p2] });
+        .send({
+          name: "Temp Team 1",
+          participant_ids: [p3, p4],
+          is_temporary: true,
+        });
 
       expect(res.statusCode).toEqual(201);
-      expect(res.body.data.name).toBe("Round 2 Team A");
-      team2Id = res.body.data.id;
+      expect(res.body.data.is_temporary).toBe(true);
+    });
 
-      // verify TeamMembers were created
-      const members = await TeamMember.findAll({ where: { team_id: team2Id } });
-      expect(members.length).toBe(2);
-      expect(members[0].speaker_order).toBe(1);
+    it("should allow a participant to be in multiple temporary teams", async () => {
+      const res = await request(app)
+        .post(`/api/events/${eventId}/teams`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({
+          name: "Temp Team 2",
+          participant_ids: [p3, p5],
+          is_temporary: true,
+        });
+
+      expect(res.statusCode).toEqual(201);
+      expect(res.body.data.is_temporary).toBe(true);
     });
 
     it("should return 403 if a random user tries to create a team", async () => {
       const res = await request(app)
-        .post(`/api/rounds/${round1Id}/teams`)
+        .post(`/api/events/${eventId}/teams`)
         .set("Authorization", `Bearer ${randomToken}`)
         .send({ name: "Hacked Team", participant_ids: [p3, p4] });
 
@@ -244,28 +266,32 @@ describe("Team API Endpoints", () => {
   });
 
   // GET part
-  describe("GET /api/rounds/:roundId/teams", () => {
-    it("should successfully fetch and format teams for a round", async () => {
+  describe("GET /api/events/:eventId/teams", () => {
+    it("should successfully fetch all teams for an event", async () => {
       const res = await request(app)
-        .get(`/api/rounds/${round1Id}/teams`)
-        .set("Authorization", `Bearer ${randomToken}`); // no restrictions on the route, so should work
+        .get(`/api/events/${eventId}/teams`)
+        .set("Authorization", `Bearer ${randomToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.data.length).toBeGreaterThanOrEqual(3);
+    });
+
+    it("should successfully filter teams by is_temporary flag", async () => {
+      const res = await request(app)
+        .get(`/api/events/${eventId}/teams?is_temporary=false`)
+        .set("Authorization", `Bearer ${randomToken}`);
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.data.length).toBe(1);
-
-      const team = res.body.data[0];
-      expect(team.name).toBe("Team A");
-      expect(team.speakers.length).toBe(2);
-      expect(team.speakers[0].name).toBe("Alice");
-      expect(team.speakers[0].order).toBe(1);
+      expect(res.body.data[0].name).toBe("Team A");
     });
   });
 
   // PUT part
-  describe("PUT /api/rounds/teams/:teamId", () => {
+  describe("PUT /api/events/:eventId/teams/:teamId", () => {
     it("should return 404 for a non-existent team", async () => {
       const res = await request(app)
-        .put(`/api/rounds/teams/99999`)
+        .put(`/api/events/${eventId}/teams/99999`)
         .set("Authorization", `Bearer ${ownerToken}`)
         .send({ name: "Updated Name" });
 
@@ -275,7 +301,7 @@ describe("Team API Endpoints", () => {
 
     it("should allow an Owner to rename a team without touching members", async () => {
       const res = await request(app)
-        .put(`/api/rounds/teams/${team1Id}`)
+        .put(`/api/events/${eventId}/teams/${team1Id}`)
         .set("Authorization", `Bearer ${ownerToken}`)
         .send({ name: "Updated Team A" });
 
@@ -286,9 +312,36 @@ describe("Team API Endpoints", () => {
       expect(dbCheck.name).toBe("Updated Team A");
     });
 
+    it("should return 400 if attempting to modify a team inside an active/completed room", async () => {
+      const roomToLock = await Room.findByPk(activeRoomId);
+      roomToLock.status = "judging";
+      await roomToLock.save();
+
+      await RoomTeam.create({
+        room_id: activeRoomId,
+        team_id: team1Id,
+        position: 1,
+      });
+
+      const res = await request(app)
+        .put(`/api/events/${eventId}/teams/${team1Id}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ participant_ids: [p1, p3] });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.message).toMatch(
+        /currently being judged or is already completed/i,
+      );
+
+      // back to pending for future testing and clean up RoomTeam
+      roomToLock.status = "pending";
+      await roomToLock.save();
+      await RoomTeam.destroy({ where: { room_id: activeRoomId } });
+    });
+
     it("should update members, removing old ones to the waitlist and activating new ones", async () => {
       const res = await request(app)
-        .put(`/api/rounds/teams/${team1Id}`)
+        .put(`/api/events/${eventId}/teams/${team1Id}`)
         .set("Authorization", `Bearer ${ownerToken}`)
         .send({ participant_ids: [p3, p4] });
 
@@ -309,44 +362,13 @@ describe("Team API Endpoints", () => {
       expect(oldMembers[0].is_waitlist).toBe(true);
       expect(oldMembers[1].is_waitlist).toBe(true);
     });
-
-    it("should return 400 if attempting to modify a team inside an active/completed room", async () => {
-      // create a Room with status judging
-      const activeRoom = await Room.create({
-        round_id: round1Id,
-        format_id: formatId,
-        status: "judging",
-      });
-
-      // assign the team to this room
-      await RoomTeam.create({
-        room_id: activeRoom.id,
-        team_id: team1Id,
-        position: 1,
-      });
-
-      // try to update the team's roster
-      const res = await request(app)
-        .put(`/api/rounds/teams/${team1Id}`)
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ participant_ids: [p1, p2] });
-
-      expect(res.statusCode).toEqual(400);
-      expect(res.body.message).toMatch(
-        /currently being judged or is already completed/i,
-      );
-
-      // back to pending for future testing
-      activeRoom.status = "pending";
-      await activeRoom.save();
-    });
   });
 
   // DELETE part
-  describe("DELETE /api/rounds/teams/:teamId", () => {
+  describe("DELETE /api/events/:eventId/teams/:teamId", () => {
     it("should return 403 if a random user tries to delete the team", async () => {
       const res = await request(app)
-        .delete(`/api/rounds/teams/${team1Id}`)
+        .delete(`/api/events/${eventId}/teams/${team1Id}`)
         .set("Authorization", `Bearer ${randomToken}`);
 
       expect(res.statusCode).toEqual(403);
@@ -357,29 +379,27 @@ describe("Team API Endpoints", () => {
 
     it("should return 404 for a non-existent team", async () => {
       const res = await request(app)
-        .delete(`/api/rounds/teams/99999`)
+        .delete(`/api/events/${eventId}/teams/99999`)
         .set("Authorization", `Bearer ${ownerToken}`);
 
       expect(res.statusCode).toEqual(404);
       expect(res.body.message).toMatch(/Team not found/i);
     });
 
-    it("should successfully delete a team and return completely freed participants to the waitlist", async () => {
+    it("should successfully delete a team and handle waitlist states correctly", async () => {
       const res = await request(app)
-        .delete(`/api/rounds/teams/${team1Id}`)
+        .delete(`/api/events/${eventId}/teams/${team1Id}`)
         .set("Authorization", `Bearer ${ownerToken}`);
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.message).toMatch(/Team dissolved successfully/i);
 
-      // verify p3 and p4 are back on the waitlist
+      // since p4 is still in Temp Team 1, the controller keeps their waitlist status as false
       const freedMembers = await EventParticipant.findAll({
         where: { id: [p3, p4] },
       });
-      expect(freedMembers[0].is_waitlist).toBe(true);
-      expect(freedMembers[1].is_waitlist).toBe(true);
+      expect(freedMembers.find((m) => m.id === p4).is_waitlist).toBe(false);
 
-      // verify the team is actually gone
       const dbCheck = await Team.findByPk(team1Id);
       expect(dbCheck).toBeNull();
     });

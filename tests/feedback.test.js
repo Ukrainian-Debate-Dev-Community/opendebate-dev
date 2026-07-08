@@ -126,7 +126,7 @@ describe("Feedback API Endpoints", () => {
     externalSpeakerId = externalRecord.id;
 
     const team = await Team.create({
-      round_id: round.id,
+      event_id: targetEventId,
       name: "Feedback Team A",
     });
     teamId = team.id;
@@ -207,8 +207,6 @@ describe("Feedback API Endpoints", () => {
       expect(res.statusCode).toEqual(201);
       expect(res.body.data.issuer_team_id).toBe(teamId);
       expect(res.body.data.issuer_participant_id).toBeNull();
-
-      teamFeedbackId = res.body.data.id;
     });
 
     it("should return 400 if both issuer_participant_id and issuer_team_id are provided", async () => {
@@ -270,7 +268,7 @@ describe("Feedback API Endpoints", () => {
         .set("Authorization", `Bearer ${randomToken}`)
         .send({
           adjudicator_id: adjudicatorId,
-          issuer_participant_id: speakerId, // submitted in the first test
+          issuer_participant_id: speakerId,
           score: 5,
         });
 
@@ -302,7 +300,9 @@ describe("Feedback API Endpoints", () => {
         .set("Authorization", `Bearer ${randomToken}`);
 
       expect(res.statusCode).toEqual(403);
-      expect(res.body.message).toMatch(/Only tournament Organisers can view/i);
+      expect(res.body.message).toMatch(
+        /You do not have Organiser or Owner privileges for this event/i,
+      );
     });
 
     it("should allow an Event Owner to view all feedback for the event", async () => {
@@ -313,7 +313,7 @@ describe("Feedback API Endpoints", () => {
       expect(res.statusCode).toEqual(200);
       expect(res.body.status).toBe("success");
       expect(Array.isArray(res.body.data)).toBe(true);
-      expect(res.body.data.length).toBeGreaterThanOrEqual(2); // the individual and team records
+      expect(res.body.data.length).toBeGreaterThanOrEqual(2);
 
       expect(res.body.data[0].Room).toBeDefined();
       expect(res.body.data[0].Adjudicator).toBeDefined();

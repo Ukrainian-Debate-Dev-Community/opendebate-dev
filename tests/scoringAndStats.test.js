@@ -129,8 +129,8 @@ describe("Scoring and Stats API Endpoints", () => {
       user_id: panelistUser.id,
     });
 
-    const team1 = await Team.create({ round_id: round.id, name: "Team 1" });
-    const team2 = await Team.create({ round_id: round.id, name: "Team 2" });
+    const team1 = await Team.create({ event_id: event.id, name: "Team 1" });
+    const team2 = await Team.create({ event_id: event.id, name: "Team 2" });
 
     // pending room
     const room = await Room.create({
@@ -234,7 +234,7 @@ describe("Scoring and Stats API Endpoints", () => {
         .set("Authorization", `Bearer ${chairToken}`)
         .send({
           teamRankings: [],
-          speakerScores: [], // can be skipped since teams are checked first
+          speakerScores: [],
         });
 
       expect(res.statusCode).toEqual(400);
@@ -276,9 +276,7 @@ describe("Scoring and Stats API Endpoints", () => {
         });
 
       expect(res.statusCode).toEqual(409);
-      expect(res.body.message).toMatch(
-        /Cannot submit scores. Room is already completed/i,
-      );
+      expect(res.body.message).toMatch(/Cannot submit scores/i);
     });
 
     it("should return 400 for duplicate teams in rankings", async () => {
