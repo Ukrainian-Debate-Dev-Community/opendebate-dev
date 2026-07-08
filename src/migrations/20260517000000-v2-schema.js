@@ -184,19 +184,21 @@ module.exports = {
     // Teams
     await queryInterface.createTable("teams", {
       id: { type: Sequelize.INTEGER, primaryKey: true, autoIncrement: true },
-      round_id: {
+      event_id: {
         type: Sequelize.INTEGER,
         allowNull: false,
-        references: { model: "rounds", key: "id" },
+        references: { model: "events", key: "id" },
         onDelete: "CASCADE",
       },
       name: { type: Sequelize.STRING(120), allowNull: false },
+      is_temporary: { type: Sequelize.BOOLEAN, defaultValue: false },
+      is_eliminated: { type: Sequelize.BOOLEAN, defaultValue: false },
     });
 
     await queryInterface.addConstraint("teams", {
-      fields: ["round_id", "name"],
+      fields: ["event_id", "name"],
       type: "unique",
-      name: "unique_team_name_per_round",
+      name: "unique_team_name_per_event",
     });
 
     // Team Members
