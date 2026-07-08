@@ -12,24 +12,21 @@ const {
 } = require("../models");
 const AppError = require("../utils/AppError");
 
-// hand-pick of format-determinated specifics
 const createRoom = async (req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
     const roundId = req.params.roundId;
     const { format_id, motion_id, teams, adjudicators } = req.body;
-    // teams: [{ team_id: 1, position: 1 }, { team_id: 2, position: 2 }]
+
+    // teams payload can now mix and match permanent and temporary teams like below
+    // [{ team_id: 1, position: 1 }, { participant_ids: [3, 4], name: "Temp B", position: 2 }]
     // adjudicators: [{ participant_id: 5, role: 'chair' }, { participant_id: 6, role: 'panelist' }]
 
-    if (!format_id) {
-      throw new AppError("format_id is required.", 400);
-    }
-    if (!Array.isArray(teams) || teams.length === 0) {
+    if (!format_id) throw new AppError("format_id is required.", 400);
+    if (!Array.isArray(teams) || teams.length === 0)
       throw new AppError("teams must be a non-empty array.", 400);
-    }
-    if (!Array.isArray(adjudicators) || adjudicators.length === 0) {
+    if (!Array.isArray(adjudicators) || adjudicators.length === 0)
       throw new AppError("adjudicators must be a non-empty array.", 400);
-    }
 
     const ALLOWED_ADJ_ROLES = ["chair", "panelist", "trainee"];
     for (const adj of adjudicators) {
@@ -44,80 +41,48 @@ const createRoom = async (req, res, next) => {
     const format = await Format.findByPk(format_id, { transaction });
     if (!format) throw new AppError("Format not found.", 404);
 
+    if (teams.length !== format.teams_per_room) {
+      throw new AppError(
+        `Format '${format.code}' requires exactly ${format.teams_per_room} teams per room.`,
+        400,
+      );
+    }
+
+    const hasChair = adjudicators.some((adj) => adj.role === "chair");
+    if (!hasChair)
+      throw new AppError(
+        "A room must have at least one adjudicator with the role 'chair'.",
+        400,
+      );
+
     const round = await Round.findByPk(roundId, { transaction });
     if (!round) throw new AppError("Round not found.", 404);
     const eventId = round.event_id;
 
     if (round.status == "completed") {
       throw new AppError(
-        "Can't create the room for the round that is already completed",
-        403,
+        "Cannot create a room for a round that is already completed.",
+        409,
       );
     }
 
-    const teamIds = teams.map((t) => t.team_id);
+    // adjudicator validation
     const adjudicatorIds = adjudicators.map((adj) => adj.participant_id);
-
-    const validTeams = await Team.findAll({
-      where: {
-        id: teamIds,
-        round_id: roundId,
-      },
-      transaction,
-    });
-
-    if (validTeams.length !== teamIds.length) {
-      throw new AppError(
-        "One or more teams do not exist, are duplicated, or do not belong to this round.",
-        400,
-      );
-    }
-
     const validAdjudicators = await EventParticipant.findAll({
-      where: {
-        id: adjudicatorIds,
-        event_id: eventId,
-      },
+      where: { id: adjudicatorIds, event_id: eventId },
       transaction,
     });
 
     if (validAdjudicators.length !== adjudicatorIds.length) {
       throw new AppError(
-        "One or more adjudicators do not exist, are duplicated, or do not belong to this event.",
+        "One or more adjudicators do not exist or do not belong to this event.",
         400,
       );
     }
 
-    // check for double-booked Teams
-    const existingRoomTeams = await RoomTeam.findAll({
-      where: { team_id: teamIds },
-      include: [
-        {
-          model: Room,
-          required: true,
-          where: { round_id: roundId },
-        },
-      ],
-      transaction,
-    });
-
-    if (existingRoomTeams.length > 0) {
-      throw new AppError(
-        "One or more teams are already assigned to a room in this round.",
-        409,
-      );
-    }
-
-    // check for double-booked Adjudicators
     const existingAdjudicators = await RoomAdjudicator.findAll({
       where: { participant_id: adjudicatorIds },
-      include: [
-        {
-          model: Room,
-          required: true,
-          where: { round_id: roundId },
-        },
-      ],
+      include: [{ model: Room, required: true, where: { round_id: roundId } }],
       transaction,
     });
 
@@ -128,22 +93,130 @@ const createRoom = async (req, res, next) => {
       );
     }
 
-    // format validation
-    if (teams.length !== format.teams_per_room) {
+    // team validation
+    let processedTeams = []; // { team_id, position, speakers: [{ participant_id, order }] }
+    let allParticipantIdsInRoom = [];
+
+    for (const teamData of teams) {
+      if (teamData.team_id) {
+        // Permanent or Existing Team cases
+        const team = await Team.findOne({
+          where: { id: teamData.team_id, event_id: eventId },
+          include: [{ model: TeamMember }],
+          transaction,
+        });
+
+        if (!team)
+          throw new AppError(
+            `Team ID ${teamData.team_id} not found in this event.`,
+            404,
+          );
+        if (team.TeamMembers.length !== format.speakers_per_team) {
+          throw new AppError(
+            `Team '${team.name}' does not have the required ${format.speakers_per_team} speakers.`,
+            400,
+          );
+        }
+
+        const speakers = team.TeamMembers.map((tm) => ({
+          participant_id: tm.participant_id,
+          order: tm.speaker_order,
+        }));
+
+        speakers.forEach((s) => allParticipantIdsInRoom.push(s.participant_id));
+        processedTeams.push({
+          team_id: team.id,
+          position: teamData.position,
+          speakers,
+        });
+      } else if (teamData.participant_ids) {
+        // Temporary "Fight Club" Team case
+        if (!teamData.name)
+          throw new AppError(
+            "A name is required when dynamically generating a temporary team.",
+            400,
+          );
+        if (teamData.participant_ids.length !== format.speakers_per_team) {
+          throw new AppError(
+            `Temporary team '${teamData.name}' does not have the required ${format.speakers_per_team} speakers.`,
+            400,
+          );
+        }
+
+        const validSpeakers = await EventParticipant.findAll({
+          where: { id: teamData.participant_ids, event_id: eventId },
+          transaction,
+        });
+
+        if (validSpeakers.length !== teamData.participant_ids.length) {
+          throw new AppError(
+            `One or more participants in temporary team '${teamData.name}' do not exist in this event.`,
+            400,
+          );
+        }
+
+        // create the temporary team
+        const newTempTeam = await Team.create(
+          {
+            event_id: eventId,
+            name: teamData.name, // must be unique per event, e.g. "Temp-R1-Pos1"
+            is_temporary: true,
+            is_eliminated: false,
+          },
+          { transaction },
+        );
+
+        const membersToInsert = teamData.participant_ids.map((id, index) => ({
+          team_id: newTempTeam.id,
+          participant_id: id,
+          speaker_order: index + 1,
+        }));
+
+        await TeamMember.bulkCreate(membersToInsert, { transaction });
+
+        const speakers = teamData.participant_ids.map((id, index) => ({
+          participant_id: id,
+          order: index + 1,
+        }));
+
+        speakers.forEach((s) => allParticipantIdsInRoom.push(s.participant_id));
+        processedTeams.push({
+          team_id: newTempTeam.id,
+          position: teamData.position,
+          speakers,
+        });
+      } else {
+        throw new AppError(
+          "Each team entry must contain either a 'team_id' or 'participant_ids' array.",
+          400,
+        );
+      }
+    }
+
+    // FC case Double-Booked Speaker
+    // ensure Speaker A isn't playing in Room 1 and Room 2 simultaneously.
+    const existingSpeakers = await RoomSpeaker.findAll({
+      where: { participant_id: allParticipantIdsInRoom },
+      include: [
+        {
+          model: RoomTeam,
+          required: true,
+          include: [
+            { model: Room, required: true, where: { round_id: roundId } },
+          ],
+        },
+      ],
+      transaction,
+    });
+
+    if (existingSpeakers.length > 0) {
       throw new AppError(
-        `Format '${format.code}' requires exactly ${format.teams_per_room} teams per room.`,
-        400,
+        "One or more speakers are already debating in a different room in this round.",
+        409,
       );
     }
 
-    const hasChair = adjudicators.some((adj) => adj.role === "chair");
-    if (!hasChair) {
-      throw new AppError(
-        "A room must have at least one adjudicator with the role 'chair'.",
-        400,
-      );
-    }
-
+    // create the Room
     const room = await Room.create(
       {
         round_id: roundId,
@@ -162,34 +235,21 @@ const createRoom = async (req, res, next) => {
     }));
     await RoomAdjudicator.bulkCreate(adjsToInsert, { transaction });
 
-    // attach Teams and auto-generate Speakers in TeamMembers
-    for (const teamData of teams) {
-      const teamMembers = await TeamMember.findAll({
-        where: { team_id: teamData.team_id },
-        transaction,
-      });
-
-      if (teamMembers.length !== format.speakers_per_team) {
-        throw new AppError(
-          `Team ${teamData.team_id} does not have the required ${format.speakers_per_team} speakers for this format.`,
-          400,
-        );
-      }
-
+    // attach Teams and Speakers
+    for (const pTeam of processedTeams) {
       const roomTeam = await RoomTeam.create(
         {
           room_id: room.id,
-          team_id: teamData.team_id,
-          position: teamData.position,
+          team_id: pTeam.team_id,
+          position: pTeam.position,
         },
         { transaction },
       );
 
-      // map TeamMembers to RoomSpeakers based on their speaker_order
-      const speakersToCreate = teamMembers.map((member) => ({
+      const speakersToCreate = pTeam.speakers.map((sp) => ({
         room_team_id: roomTeam.id,
-        participant_id: member.participant_id,
-        speech_position: member.speaker_order,
+        participant_id: sp.participant_id,
+        speech_position: sp.order,
       }));
 
       await RoomSpeaker.bulkCreate(speakersToCreate, { transaction });
@@ -228,10 +288,13 @@ const getRoundRooms = async (req, res, next) => {
           model: RoomTeam,
           attributes: ["id", "position", "rank"],
           include: [
-            { model: Team, attributes: ["id", "name"] },
+            { model: Team, attributes: ["id", "name", "is_temporary"] },
             {
               model: RoomSpeaker,
               attributes: ["id", "speech_position", "rank"],
+              include: [
+                { model: EventParticipant, attributes: ["id", "display_name"] },
+              ],
             },
           ],
         },
@@ -245,14 +308,13 @@ const getRoundRooms = async (req, res, next) => {
 };
 
 const deleteRoom = async (req, res, next) => {
-  // lock the room row and refuse deletion if it's mid-ballot, so a
-  // delete can't race a chair's submission and orphan scores.
   const transaction = await sequelize.transaction();
   try {
     const room = await Room.findByPk(req.params.roomId, {
       lock: transaction.LOCK.UPDATE,
       transaction,
     });
+
     if (!room) throw new AppError("Room not found.", 404);
 
     if (room.status === "judging" || room.status === "completed") {
@@ -262,11 +324,28 @@ const deleteRoom = async (req, res, next) => {
       );
     }
 
+    const roomTeams = await RoomTeam.findAll({
+      where: { room_id: room.id },
+      include: [{ model: Team }],
+      transaction,
+    });
+
+    // identify any temporary teams tied to this room to clean them up
+    const temporaryTeamsToPurge = roomTeams
+      .map((rt) => rt.Team)
+      .filter((team) => team && team.is_temporary);
+
     await room.destroy({ transaction });
+
+    for (const tempTeam of temporaryTeamsToPurge) {
+      await tempTeam.destroy({ transaction });
+    }
+
     await transaction.commit();
-    res
-      .status(200)
-      .json({ status: "success", message: "Room deleted successfully." });
+    res.status(200).json({
+      status: "success",
+      message: "Room and associated temporary teams deleted successfully.",
+    });
   } catch (error) {
     await transaction.rollback();
     next(error);

@@ -1,6 +1,5 @@
 const express = require("express");
 const router = express.Router();
-const teamController = require("../controllers/teamController");
 const roomController = require("../controllers/roomController");
 const roundController = require("../controllers/roundController");
 const {
@@ -14,12 +13,6 @@ router.use(verifyToken);
 router.get("/:roundId", roundController.getRoundById);
 router.put("/:roundId", restrictToOwnOrg, roundController.updateRound);
 router.delete("/:roundId", restrictToOwnOrg, roundController.deleteRound);
-
-// teams
-router.get("/:roundId/teams", teamController.getRoundTeams);
-router.post("/:roundId/teams", restrictToOwnOrg, teamController.createTeam);
-router.put("/teams/:teamId", restrictToOwnOrg, teamController.updateTeam);
-router.delete("/teams/:teamId", restrictToOwnOrg, teamController.deleteTeam);
 
 // rooms
 router.get("/:roundId/rooms", roomController.getRoundRooms);
