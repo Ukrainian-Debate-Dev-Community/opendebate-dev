@@ -264,12 +264,11 @@ describe("Event Participant API Endpoints", () => {
       const res = await request(app)
         .put(`/api/events/${targetEventId}/participants/${guestParticipantId}`)
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ role: "adjudicator", is_waitlist: false });
+        .send({ role: "adjudicator" });
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.status).toBe("success");
       expect(res.body.data.role).toBe("adjudicator");
-      expect(res.body.data.is_waitlist).toBe(false);
     });
 
     it("should return 404 for updating a non-existent participant", async () => {

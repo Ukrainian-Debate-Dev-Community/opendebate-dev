@@ -87,12 +87,6 @@ const createTeam = async (req, res, next) => {
 
     await TeamMember.bulkCreate(membersToInsert, { transaction });
 
-    // remove from the waitlist
-    await EventParticipant.update(
-      { is_waitlist: false },
-      { where: { id: participant_ids }, transaction },
-    );
-
     await transaction.commit();
     res.status(201).json({ status: "success", data: newTeam });
   } catch (error) {
@@ -231,8 +225,6 @@ const updateTeam = async (req, res, next) => {
         }
       }
 
-      const oldParticipantIds = team.TeamMembers.map((tm) => tm.participant_id);
-
       // clear old TeamMembers and bulk create new ones
       await TeamMember.destroy({ where: { team_id: teamId }, transaction });
 
@@ -242,46 +234,6 @@ const updateTeam = async (req, res, next) => {
         speaker_order: index + 1,
       }));
       await TeamMember.bulkCreate(membersToInsert, { transaction });
-
-      // waitlist management
-      const removedIds = oldParticipantIds.filter(
-        (id) => !participant_ids.includes(id),
-      );
-
-      if (removedIds.length > 0) {
-        // only return to the waitlist participants who aren't on any
-        // other team — a participant on a team in another round is still
-        // active and shouldn't be re-listed as available.
-        const stillOnOtherTeam = await TeamMember.findAll({
-          where: {
-            participant_id: removedIds,
-            team_id: { [Op.ne]: teamId },
-          },
-          attributes: ["participant_id"],
-          transaction,
-        });
-        const stillActiveIds = new Set(
-          stillOnOtherTeam.map((m) => m.participant_id),
-        );
-        const trulyRemovedIds = removedIds.filter(
-          (id) => !stillActiveIds.has(id),
-        );
-
-        if (trulyRemovedIds.length > 0) {
-          await EventParticipant.update(
-            { is_waitlist: true },
-            { where: { id: trulyRemovedIds }, transaction },
-          );
-        }
-      }
-
-      if (participant_ids.length > 0) {
-        // new members are removed from waitlist
-        await EventParticipant.update(
-          { is_waitlist: false },
-          { where: { id: participant_ids }, transaction },
-        );
-      }
 
       // Sync RoomSpeakers
       for (const rt of roomTeams) {
@@ -324,40 +276,13 @@ const deleteTeam = async (req, res, next) => {
     });
     if (!team) throw new AppError("Team not found in this event.", 404);
 
-    // players to return to the waitlist pool
-    const participantIds = team.TeamMembers.map((tm) => tm.participant_id);
-
     // disband the team
     await team.destroy({ transaction });
-
-    if (participantIds.length > 0) {
-      // only re-list participants who aren't on any other team
-      // (a participant on another team in any round is still active).
-      const stillOnOtherTeam = await TeamMember.findAll({
-        where: { participant_id: participantIds },
-        attributes: ["participant_id"],
-        transaction,
-      });
-      const stillActiveIds = new Set(
-        stillOnOtherTeam.map((m) => m.participant_id),
-      );
-      const trulyFreedIds = participantIds.filter(
-        (id) => !stillActiveIds.has(id),
-      );
-
-      if (trulyFreedIds.length > 0) {
-        await EventParticipant.update(
-          { is_waitlist: true },
-          { where: { id: trulyFreedIds }, transaction },
-        );
-      }
-    }
 
     await transaction.commit();
     res.status(200).json({
       status: "success",
-      message:
-        "Team dissolved successfully. Participants returned to the available pool.",
+      message: "Team dissolved successfully.",
     });
   } catch (error) {
     await transaction.rollback();

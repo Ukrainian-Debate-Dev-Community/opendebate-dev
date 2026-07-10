@@ -11,7 +11,7 @@ const AppError = require("../utils/AppError");
 const addParticipant = async (req, res, next) => {
   try {
     const eventId = req.params.eventId;
-    const { user_id, display_name, role, is_waitlist = true } = req.body;
+    const { user_id, display_name, role } = req.body;
 
     if (!display_name || !role) {
       throw new AppError("Display name and role are required.", 400);
@@ -45,7 +45,6 @@ const addParticipant = async (req, res, next) => {
       user_id: user_id || null,
       display_name,
       role,
-      is_waitlist: is_waitlist,
       claim_token_hash: claimTokenHash,
     });
 
@@ -97,7 +96,7 @@ const getEventParticipants = async (req, res, next) => {
 const updateParticipant = async (req, res, next) => {
   try {
     const { participantId } = req.params;
-    const { display_name, role, is_waitlist } = req.body;
+    const { display_name, role } = req.body;
 
     const participant = await EventParticipant.findOne({
       where: { id: participantId, event_id: req.params.eventId },
@@ -107,7 +106,6 @@ const updateParticipant = async (req, res, next) => {
 
     if (display_name) participant.display_name = display_name;
     if (role) participant.role = role;
-    if (is_waitlist !== undefined) participant.is_waitlist = is_waitlist;
 
     await participant.save();
 

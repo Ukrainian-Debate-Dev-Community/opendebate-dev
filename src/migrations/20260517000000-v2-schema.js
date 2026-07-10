@@ -141,7 +141,6 @@ module.exports = {
       },
       display_name: { type: Sequelize.STRING(120), allowNull: false },
       role: { type: Sequelize.STRING(20), allowNull: false }, // speaker or adjudicator
-      is_waitlist: { type: Sequelize.BOOLEAN, defaultValue: true },
       claim_token_hash: { type: Sequelize.STRING(255), allowNull: true },
       claim_token_used_at: { type: Sequelize.DATE, allowNull: true },
     });

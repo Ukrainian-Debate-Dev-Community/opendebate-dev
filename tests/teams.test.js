@@ -98,31 +98,26 @@ describe("Team API Endpoints", () => {
         event_id: eventId,
         display_name: "Alice",
         role: "speaker",
-        is_waitlist: true,
       },
       {
         event_id: eventId,
         display_name: "Bob",
         role: "speaker",
-        is_waitlist: true,
       },
       {
         event_id: eventId,
         display_name: "Charlie",
         role: "speaker",
-        is_waitlist: true,
       },
       {
         event_id: eventId,
         display_name: "John",
         role: "speaker",
-        is_waitlist: true,
       },
       {
         event_id: eventId,
         display_name: "Eve",
         role: "speaker",
-        is_waitlist: true,
       },
     ]);
 
@@ -203,9 +198,6 @@ describe("Team API Endpoints", () => {
       const members = await TeamMember.findAll({ where: { team_id: team1Id } });
       expect(members.length).toBe(2);
       expect(members[0].speaker_order).toBe(1);
-
-      const updatedP1 = await EventParticipant.findByPk(p1);
-      expect(updatedP1.is_waitlist).toBe(false);
     });
 
     it("should return 409 if a participant is already in a permanent team", async () => {
@@ -339,7 +331,7 @@ describe("Team API Endpoints", () => {
       await RoomTeam.destroy({ where: { room_id: activeRoomId } });
     });
 
-    it("should update members, removing old ones to the waitlist and activating new ones", async () => {
+    it("should update members successfully", async () => {
       const res = await request(app)
         .put(`/api/events/${eventId}/teams/${team1Id}`)
         .set("Authorization", `Bearer ${ownerToken}`)
@@ -347,20 +339,6 @@ describe("Team API Endpoints", () => {
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.message).toMatch(/Team roster updated successfully/i);
-
-      // verify new members are off the waitlist
-      const newMembers = await EventParticipant.findAll({
-        where: { id: [p3, p4] },
-      });
-      expect(newMembers[0].is_waitlist).toBe(false);
-      expect(newMembers[1].is_waitlist).toBe(false);
-
-      // verify old members are on the waitlist
-      const oldMembers = await EventParticipant.findAll({
-        where: { id: [p1, p2] },
-      });
-      expect(oldMembers[0].is_waitlist).toBe(true);
-      expect(oldMembers[1].is_waitlist).toBe(true);
     });
   });
 
@@ -386,19 +364,13 @@ describe("Team API Endpoints", () => {
       expect(res.body.message).toMatch(/Team not found/i);
     });
 
-    it("should successfully delete a team and handle waitlist states correctly", async () => {
+    it("should successfully delete a team", async () => {
       const res = await request(app)
         .delete(`/api/events/${eventId}/teams/${team1Id}`)
         .set("Authorization", `Bearer ${ownerToken}`);
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.message).toMatch(/Team dissolved successfully/i);
-
-      // since p4 is still in Temp Team 1, the controller keeps their waitlist status as false
-      const freedMembers = await EventParticipant.findAll({
-        where: { id: [p3, p4] },
-      });
-      expect(freedMembers.find((m) => m.id === p4).is_waitlist).toBe(false);
 
       const dbCheck = await Team.findByPk(team1Id);
       expect(dbCheck).toBeNull();
