@@ -7,6 +7,7 @@ const {
   Format,
   Team,
   TeamMember,
+  Motion,
   Round,
   sequelize,
 } = require("../models");
@@ -48,12 +49,26 @@ const createRoom = async (req, res, next) => {
       );
     }
 
+    // team position check
+    const providedPositions = teams
+      .map((t) => t.position)
+      .sort((a, b) => a - b);
+    for (let i = 0; i < format.teams_per_room; i++) {
+      if (providedPositions[i] !== i + 1) {
+        throw new AppError(
+          `Team positions must be a unique permutation from 1 to ${format.teams_per_room}.`,
+          400,
+        );
+      }
+    }
+
     const hasChair = adjudicators.some((adj) => adj.role === "chair");
-    if (!hasChair)
+    if (!hasChair) {
       throw new AppError(
         "A room must have at least one adjudicator with the role 'chair'.",
         400,
       );
+    }
 
     const round = await Round.findByPk(roundId, { transaction });
     if (!round) throw new AppError("Round not found.", 404);
@@ -64,6 +79,19 @@ const createRoom = async (req, res, next) => {
         "Cannot create a room for a round that is already completed.",
         409,
       );
+    }
+
+    // motion validation
+    if (motion_id) {
+      const motion = await Motion.findOne({
+        where: { id: motion_id, event_id: eventId, is_deleted: false },
+        transaction,
+      });
+      if (!motion)
+        throw new AppError(
+          "Motion not found or does not belong to this event.",
+          400,
+        );
     }
 
     // adjudicator validation
@@ -80,6 +108,15 @@ const createRoom = async (req, res, next) => {
       );
     }
 
+    for (const adj of validAdjudicators) {
+      if (adj.role !== "adjudicator") {
+        throw new AppError(
+          `Participant '${adj.display_name}' is not registered as an adjudicator.`,
+          400,
+        );
+      }
+    }
+
     const existingAdjudicators = await RoomAdjudicator.findAll({
       where: { participant_id: adjudicatorIds },
       include: [{ model: Room, required: true, where: { round_id: roundId } }],
@@ -93,24 +130,50 @@ const createRoom = async (req, res, next) => {
       );
     }
 
-    // team validation
-    let processedTeams = []; // { team_id, position, speakers: [{ participant_id, order }] }
+    // bulk fetches
+    const permanentTeamIds = teams
+      .filter((t) => t.team_id)
+      .map((t) => t.team_id);
+    const tempSpeakerIds = teams
+      .filter((t) => t.participant_ids)
+      .flatMap((t) => t.participant_ids);
+
+    let permanentTeamsMap = new Map();
+    if (permanentTeamIds.length > 0) {
+      const permanentTeams = await Team.findAll({
+        where: { id: permanentTeamIds, event_id: eventId },
+        include: [{ model: TeamMember }],
+        transaction,
+      });
+      permanentTeamsMap = new Map(permanentTeams.map((t) => [t.id, t]));
+    }
+
+    let validTempSpeakersMap = new Map();
+    if (tempSpeakerIds.length > 0) {
+      const validTempSpeakers = await EventParticipant.findAll({
+        where: { id: tempSpeakerIds, event_id: eventId },
+        transaction,
+      });
+      validTempSpeakersMap = new Map(
+        validTempSpeakers.map((sp) => [sp.id, sp]),
+      );
+    }
+
+    let processedTeams = [];
     let allParticipantIdsInRoom = [];
 
+    // Memory-mapped team processing
     for (const teamData of teams) {
       if (teamData.team_id) {
-        // Permanent or Existing Team cases
-        const team = await Team.findOne({
-          where: { id: teamData.team_id, event_id: eventId },
-          include: [{ model: TeamMember }],
-          transaction,
-        });
+        // Permanent or Existing Team
+        const team = permanentTeamsMap.get(teamData.team_id);
 
-        if (!team)
+        if (!team) {
           throw new AppError(
             `Team ID ${teamData.team_id} not found in this event.`,
             404,
           );
+        }
         if (team.TeamMembers.length !== format.speakers_per_team) {
           throw new AppError(
             `Team '${team.name}' does not have the required ${format.speakers_per_team} speakers.`,
@@ -131,11 +194,12 @@ const createRoom = async (req, res, next) => {
         });
       } else if (teamData.participant_ids) {
         // Temporary "Fight Club" Team case
-        if (!teamData.name)
+        if (!teamData.name) {
           throw new AppError(
             "A name is required when dynamically generating a temporary team.",
             400,
           );
+        }
         if (teamData.participant_ids.length !== format.speakers_per_team) {
           throw new AppError(
             `Temporary team '${teamData.name}' does not have the required ${format.speakers_per_team} speakers.`,
@@ -143,16 +207,21 @@ const createRoom = async (req, res, next) => {
           );
         }
 
-        const validSpeakers = await EventParticipant.findAll({
-          where: { id: teamData.participant_ids, event_id: eventId },
-          transaction,
-        });
-
-        if (validSpeakers.length !== teamData.participant_ids.length) {
-          throw new AppError(
-            `One or more participants in temporary team '${teamData.name}' do not exist in this event.`,
-            400,
-          );
+        // verify temp speakers exist and have the correct role
+        for (const spId of teamData.participant_ids) {
+          const sp = validTempSpeakersMap.get(spId);
+          if (!sp) {
+            throw new AppError(
+              `Participant ID ${spId} does not exist in this event.`,
+              400,
+            );
+          }
+          if (sp.role !== "speaker") {
+            throw new AppError(
+              `Participant '${sp.display_name}' is not registered as a speaker.`,
+              400,
+            );
+          }
         }
 
         // create the temporary team

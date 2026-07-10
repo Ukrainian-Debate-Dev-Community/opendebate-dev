@@ -99,8 +99,11 @@ const updateParticipant = async (req, res, next) => {
     const { participantId } = req.params;
     const { display_name, role, is_waitlist } = req.body;
 
-    const participant = await EventParticipant.findByPk(participantId);
-    if (!participant) throw new AppError("Participant not found.", 404);
+    const participant = await EventParticipant.findOne({
+      where: { id: participantId, event_id: req.params.eventId },
+    });
+    if (!participant)
+      throw new AppError("Participant not found in this event.", 404);
 
     if (display_name) participant.display_name = display_name;
     if (role) participant.role = role;
@@ -117,9 +120,11 @@ const updateParticipant = async (req, res, next) => {
 const removeParticipant = async (req, res, next) => {
   try {
     const { participantId } = req.params;
-    const participant = await EventParticipant.findByPk(participantId);
-
-    if (!participant) throw new AppError("Participant not found.", 404);
+    const participant = await EventParticipant.findOne({
+      where: { id: participantId, event_id: req.params.eventId },
+    });
+    if (!participant)
+      throw new AppError("Participant not found in this event.", 404);
 
     // refuse removal while the participant is still attached to debate
     // state — pulling them out from under a team/room would orphan scores

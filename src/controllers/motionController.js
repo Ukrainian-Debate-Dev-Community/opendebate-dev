@@ -71,11 +71,11 @@ const getMotions = async (req, res, next) => {
 const getMotionById = async (req, res, next) => {
   try {
     const { eventId, motionId } = req.params;
-    const motion = await Motion.findOne({
-      where: { id: motionId, event_id: eventId, is_deleted: false },
-    });
 
-    if (!motion) throw new AppError("Motion not found.", 404);
+    const motion = await Motion.findOne({
+      where: { id: motionId, event_id: req.params.eventId, is_deleted: false },
+    });
+    if (!motion) throw new AppError("Motion not found in this event.", 404);
 
     if (motion.is_released) {
       return res.status(200).json({ status: "success", data: motion });
@@ -105,9 +105,10 @@ const updateMotion = async (req, res, next) => {
     const { motionId } = req.params;
     const { motion_text, infoslide, is_released } = req.body;
 
-    const motion = await Motion.findByPk(motionId);
-    if (!motion || motion.is_deleted)
-      throw new AppError("Motion not found.", 404);
+    const motion = await Motion.findOne({
+      where: { id: motionId, event_id: req.params.eventId, is_deleted: false },
+    });
+    if (!motion) throw new AppError("Motion not found in this event.", 404);
 
     motion.motion_text = motion_text || motion.motion_text;
     motion.infoslide = infoslide !== undefined ? infoslide : motion.infoslide;
@@ -124,10 +125,11 @@ const updateMotion = async (req, res, next) => {
 const deleteMotion = async (req, res, next) => {
   try {
     const { motionId } = req.params;
-    const motion = await Motion.findByPk(motionId);
 
-    if (!motion || motion.is_deleted)
-      throw new AppError("Motion not found.", 404);
+    const motion = await Motion.findOne({
+      where: { id: motionId, event_id: req.params.eventId, is_deleted: false },
+    });
+    if (!motion) throw new AppError("Motion not found in this event.", 404);
 
     // soft-delete so rooms that used this motion preserve their
     // historical reference (the FK is SET NULL on hard delete, which would

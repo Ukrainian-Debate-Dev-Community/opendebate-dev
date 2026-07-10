@@ -158,12 +158,12 @@ const updateTeam = async (req, res, next) => {
     const eventId = req.params.eventId;
     const { name, participant_ids } = req.body;
 
-    const team = await Team.findByPk(teamId, {
+    const team = await Team.findOne({
+      where: { id: teamId, event_id: eventId },
       include: [TeamMember],
       transaction,
     });
-
-    if (!team) throw new AppError("Team not found.", 404);
+    if (!team) throw new AppError("Team not found in this event.", 404);
 
     const isTemporary = team.is_temporary;
 
@@ -315,13 +315,14 @@ const deleteTeam = async (req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
     const teamId = req.params.teamId;
+    const eventId = req.params.eventId;
 
-    const team = await Team.findByPk(teamId, {
+    const team = await Team.findOne({
+      where: { id: teamId, event_id: eventId },
       include: [TeamMember],
       transaction,
     });
-
-    if (!team) throw new AppError("Team not found.", 404);
+    if (!team) throw new AppError("Team not found in this event.", 404);
 
     // players to return to the waitlist pool
     const participantIds = team.TeamMembers.map((tm) => tm.participant_id);

@@ -7,6 +7,7 @@ const {
   RoomAdjudicator,
   EventParticipant,
   Team,
+  TeamMember,
   sequelize,
 } = require("../models");
 const AppError = require("../utils/AppError");
@@ -58,8 +59,11 @@ const submitFeedback = async (req, res, next) => {
       );
     }
 
-    // verify the Issuer and check for duplicates
+    // verify the Issuer, check user-ownership, and check for duplicates
     let existingFeedback;
+    const userId = req.user.id;
+    const isAdmin = req.user.isAdmin;
+
     if (issuer_team_id) {
       const validTeam = await RoomTeam.findOne({
         where: { room_id: roomId, team_id: issuer_team_id },
@@ -71,6 +75,30 @@ const submitFeedback = async (req, res, next) => {
           400,
         );
 
+      // team can submit the feedback only by its member (claimed participant ==== user_id)
+      //  or in case of a "free spot" of 1+ unclaimed participant
+      if (!isAdmin) {
+        const teamMembers = await TeamMember.findAll({
+          where: { team_id: issuer_team_id },
+          include: [{ model: EventParticipant, attributes: ["user_id"] }],
+          transaction,
+        });
+
+        const isMember = teamMembers.some(
+          (tm) => tm.EventParticipant.user_id === userId,
+        );
+        const hasUnclaimedSpot = teamMembers.some(
+          (tm) => tm.EventParticipant.user_id === null,
+        );
+
+        if (!isMember && !hasUnclaimedSpot) {
+          throw new AppError(
+            "You can only submit collective feedback for a team you belong to.",
+            403,
+          );
+        }
+      }
+
       existingFeedback = await Feedback.findOne({
         where: { room_id: roomId, adjudicator_id, issuer_team_id },
         transaction,
@@ -80,6 +108,7 @@ const submitFeedback = async (req, res, next) => {
         where: { participant_id: issuer_participant_id },
         include: [
           { model: RoomTeam, where: { room_id: roomId }, required: true },
+          { model: EventParticipant, attributes: ["user_id"] },
         ],
         transaction,
       });
@@ -88,6 +117,15 @@ const submitFeedback = async (req, res, next) => {
           "The specified speaker did not debate in this room.",
           400,
         );
+
+      // claimed participants should answer for themselves
+      if (!isAdmin) {
+        const participantUserId = validSpeaker.EventParticipant.user_id;
+
+        if (participantUserId !== null && participantUserId !== userId) {
+          throw new AppError("You can only submit feedback for yourself.", 403);
+        }
+      }
 
       existingFeedback = await Feedback.findOne({
         where: { room_id: roomId, adjudicator_id, issuer_participant_id },
