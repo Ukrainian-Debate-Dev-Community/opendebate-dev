@@ -31,7 +31,6 @@ module.exports = (sequelize) => {
   Round.associate = (models) => {
     Round.belongsTo(models.Event, { foreignKey: "event_id" });
     Round.hasMany(models.Room, { foreignKey: "round_id", onDelete: "CASCADE" });
-    Round.hasMany(models.Team, { foreignKey: "round_id", onDelete: "CASCADE" });
   };
 
   return Round;
