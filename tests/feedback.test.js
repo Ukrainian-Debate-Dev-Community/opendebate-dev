@@ -36,6 +36,9 @@ describe("Feedback API Endpoints", () => {
   let externalSpeakerId;
   let teamId;
 
+  let victimSpeakerId;
+  let victimTeamId;
+
   let individualFeedbackId;
 
   beforeAll(async () => {
@@ -74,6 +77,12 @@ describe("Feedback API Endpoints", () => {
       { expiresIn: "1h" },
     );
 
+    // Victim User for the Impersonation tests
+    const victimUser = await User.create({
+      username: "victim_user",
+      password: "hashedpassword123",
+    });
+
     const targetOrg = await Organisation.create({
       name: "Feedback Org",
       type: "academic",
@@ -111,12 +120,22 @@ describe("Feedback API Endpoints", () => {
     });
     adjudicatorId = adjudicatorRecord.id;
 
+    // "Guest" (user_id is null)
     const speakerRecord = await EventParticipant.create({
       event_id: targetEventId,
       display_name: "Lead Speaker",
       role: "speaker",
     });
     speakerId = speakerRecord.id;
+
+    // fully registered to the Victim User
+    const victimSpeakerRecord = await EventParticipant.create({
+      event_id: targetEventId,
+      display_name: "Victim Speaker",
+      role: "speaker",
+      user_id: victimUser.id,
+    });
+    victimSpeakerId = victimSpeakerRecord.id;
 
     const externalRecord = await EventParticipant.create({
       event_id: targetEventId,
@@ -125,6 +144,7 @@ describe("Feedback API Endpoints", () => {
     });
     externalSpeakerId = externalRecord.id;
 
+    // Guest Team
     const team = await Team.create({
       event_id: targetEventId,
       name: "Feedback Team A",
@@ -133,6 +153,18 @@ describe("Feedback API Endpoints", () => {
     await TeamMember.create({
       team_id: team.id,
       participant_id: speakerId,
+      speaker_order: 1,
+    });
+
+    // Victim Team
+    const teamB = await Team.create({
+      event_id: targetEventId,
+      name: "Feedback Team B",
+    });
+    victimTeamId = teamB.id;
+    await TeamMember.create({
+      team_id: teamB.id,
+      participant_id: victimSpeakerId,
       speaker_order: 1,
     });
 
@@ -150,16 +182,28 @@ describe("Feedback API Endpoints", () => {
     });
     pendingRoomId = pendingRoom.id;
 
-    const roomTeam = await RoomTeam.create({
+    const roomTeamA = await RoomTeam.create({
       room_id: room.id,
       team_id: team.id,
       position: 1,
     });
     await RoomSpeaker.create({
-      room_team_id: roomTeam.id,
+      room_team_id: roomTeamA.id,
       participant_id: speakerId,
       speech_position: 1,
     });
+
+    const roomTeamB = await RoomTeam.create({
+      room_id: room.id,
+      team_id: teamB.id,
+      position: 2,
+    });
+    await RoomSpeaker.create({
+      room_team_id: roomTeamB.id,
+      participant_id: victimSpeakerId,
+      speech_position: 1,
+    });
+
     await RoomAdjudicator.create({
       room_id: room.id,
       participant_id: adjudicatorId,
@@ -207,6 +251,38 @@ describe("Feedback API Endpoints", () => {
       expect(res.statusCode).toEqual(201);
       expect(res.body.data.issuer_team_id).toBe(teamId);
       expect(res.body.data.issuer_participant_id).toBeNull();
+    });
+
+    it("should return 403 if random user tries to impersonate a fully registered individual speaker", async () => {
+      const res = await request(app)
+        .post(`/api/rooms/${targetRoomId}/feedback`)
+        .set("Authorization", `Bearer ${randomToken}`)
+        .send({
+          adjudicator_id: adjudicatorId,
+          issuer_participant_id: victimSpeakerId,
+          score: 1,
+        });
+
+      expect(res.statusCode).toEqual(403);
+      expect(res.body.message).toMatch(
+        /You can only submit feedback for yourself/i,
+      );
+    });
+
+    it("should return 403 if random user tries to impersonate a fully registered team", async () => {
+      const res = await request(app)
+        .post(`/api/rooms/${targetRoomId}/feedback`)
+        .set("Authorization", `Bearer ${randomToken}`)
+        .send({
+          adjudicator_id: adjudicatorId,
+          issuer_team_id: victimTeamId,
+          score: 1,
+        });
+
+      expect(res.statusCode).toEqual(403);
+      expect(res.body.message).toMatch(
+        /You can only submit collective feedback for a team you belong to/i,
+      );
     });
 
     it("should return 400 if both issuer_participant_id and issuer_team_id are provided", async () => {

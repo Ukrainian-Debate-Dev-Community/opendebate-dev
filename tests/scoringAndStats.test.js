@@ -17,6 +17,7 @@ const {
 const jwt = require("jsonwebtoken");
 
 describe("Scoring and Stats API Endpoints", () => {
+  let adminToken;
   let chairToken;
   let panelistToken;
   let randomToken;
@@ -25,6 +26,7 @@ describe("Scoring and Stats API Endpoints", () => {
   let chairUserId;
   let roomId;
   let completedRoomId;
+  let noChairRoomId;
 
   let roomTeam1Id, roomTeam2Id;
   let roomSpeaker1Id, roomSpeaker2Id, roomSpeaker3Id, roomSpeaker4Id;
@@ -32,6 +34,16 @@ describe("Scoring and Stats API Endpoints", () => {
   beforeAll(async () => {
     // wipe and sync
     await sequelize.sync({ force: true });
+
+    const adminUser = await User.create({
+      username: "admin_user",
+      password: "hashedpassword123",
+    });
+    adminToken = jwt.sign(
+      { id: adminUser.id, isAdmin: true },
+      process.env.JWT_SECRET || "testsecret",
+      { expiresIn: "1h" },
+    );
 
     // create User for a stat check
     const targetUser = await User.create({
@@ -202,6 +214,14 @@ describe("Scoring and Stats API Endpoints", () => {
       participant_id: pChair.id,
       role: "chair",
     });
+
+    // no chair room
+    const noChairRoom = await Room.create({
+      round_id: round.id,
+      format_id: format.id,
+      status: "pending",
+    });
+    noChairRoomId = noChairRoom.id;
   });
 
   afterAll(async () => {
@@ -264,6 +284,27 @@ describe("Scoring and Stats API Endpoints", () => {
       expect(res.body.message).toMatch(
         /Unauthorised: Only the designated Chair \(or an Owner\/Organiser\) can perform this action/i,
       );
+    });
+
+    it("should return 400 if the room lacks a designated chair", async () => {
+      const res = await request(app)
+        .post(`/api/rooms/${noChairRoomId}/scores`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          teamRankings: [
+            { room_team_id: roomTeam1Id, rank: 1 },
+            { room_team_id: roomTeam2Id, rank: 2 },
+          ],
+          speakerScores: [
+            { room_speaker_id: roomSpeaker1Id, score: 80 },
+            { room_speaker_id: roomSpeaker2Id, score: 80 },
+            { room_speaker_id: roomSpeaker3Id, score: 75 },
+            { room_speaker_id: roomSpeaker4Id, score: 75 },
+          ],
+        });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.message).toMatch(/lacks a designated chair/i);
     });
 
     it("should return 409 if the room is already completed or void", async () => {
