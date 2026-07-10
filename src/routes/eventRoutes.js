@@ -13,6 +13,7 @@ const {
 const motionRoutes = require("./motionRoutes");
 const participantRoutes = require("./eventParticipantRoutes");
 const organizerRoutes = require("./organizerRoutes");
+const conflictRoutes = require("./conflictRoutes");
 
 router.use(verifyToken);
 
@@ -20,6 +21,7 @@ router.use(verifyToken);
 router.use("/:eventId/motions", motionRoutes);
 router.use("/:eventId/participants", participantRoutes);
 router.use("/:eventId/organizers", organizerRoutes);
+router.use("/:eventId/conflicts", conflictRoutes);
 
 // creating round and reading all
 router.get("/:eventId/rounds", roundController.getEventRounds);
