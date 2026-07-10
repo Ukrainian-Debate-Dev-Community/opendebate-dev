@@ -34,6 +34,18 @@ module.exports = (sequelize) => {
       foreignKey: "participant_id",
       onDelete: "CASCADE",
     });
+
+    EventParticipant.hasMany(models.Conflict, {
+      as: "IssuedConflicts",
+      foreignKey: "issuer_participant_id",
+      onDelete: "CASCADE",
+    });
+
+    EventParticipant.hasMany(models.Conflict, {
+      as: "TargetedConflicts",
+      foreignKey: "target_participant_id",
+      onDelete: "CASCADE",
+    });
   };
 
   return EventParticipant;

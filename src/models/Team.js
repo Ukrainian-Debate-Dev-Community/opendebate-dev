@@ -25,6 +25,11 @@ module.exports = (sequelize) => {
       foreignKey: "team_id",
       onDelete: "CASCADE",
     });
+
+    Team.hasMany(models.Conflict, {
+      foreignKey: "target_team_id",
+      onDelete: "CASCADE",
+    });
   };
 
   return Team;

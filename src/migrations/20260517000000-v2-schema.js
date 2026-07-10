@@ -362,11 +362,52 @@ module.exports = {
         (issuer_participant_id IS NULL AND issuer_team_id IS NOT NULL)
       );
     `);
+
+    // Conflicts
+    await queryInterface.createTable("conflicts", {
+      id: { type: Sequelize.INTEGER, primaryKey: true, autoIncrement: true },
+      event_id: {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        references: { model: "events", key: "id" },
+        onDelete: "CASCADE",
+      },
+      issuer_participant_id: {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        references: { model: "event_participants", key: "id" },
+        onDelete: "CASCADE",
+      },
+      target_participant_id: {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: { model: "event_participants", key: "id" },
+        onDelete: "CASCADE",
+      },
+      target_team_id: {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: { model: "teams", key: "id" },
+        onDelete: "CASCADE",
+      },
+      comment: { type: Sequelize.TEXT, allowNull: true },
+    });
+
+    // enforce exclusive target constraint
+    await queryInterface.sequelize.query(`
+      ALTER TABLE conflicts
+      ADD CONSTRAINT check_exclusive_conflict_target
+      CHECK (
+        (target_participant_id IS NOT NULL AND target_team_id IS NULL) OR
+        (target_participant_id IS NULL AND target_team_id IS NOT NULL)
+      );
+    `);
   },
 
   async down(queryInterface, Sequelize) {
     // drop all tables
     const v2Tables = [
+      "conflicts",
       "feedbacks",
       "scores",
       "room_speakers",
