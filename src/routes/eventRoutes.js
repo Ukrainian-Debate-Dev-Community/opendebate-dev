@@ -4,6 +4,7 @@ const eventController = require("../controllers/eventController");
 const roundController = require("../controllers/roundController");
 const feedbackController = require("../controllers/feedbackController");
 const teamController = require("../controllers/teamController");
+const standingsController = require("../controllers/standingsController");
 const {
   verifyToken,
   restrictToOwnOrg,
@@ -27,11 +28,25 @@ router.use("/:eventId/conflicts", conflictRoutes);
 router.get("/:eventId/rounds", roundController.getEventRounds);
 router.post("/:eventId/rounds", restrictToOwnOrg, roundController.createRound);
 
+// release all rounds
+router.patch(
+  "/:eventId/rounds/release-all",
+  restrictToOwnOrg,
+  roundController.releaseAllRounds,
+);
+
 // get all feedback entries
 router.get(
   "/:eventId/feedback",
   restrictToOwnOrg,
   feedbackController.getEventFeedback,
+);
+
+// get speaker/team standings
+router.get("/:eventId/standings/teams", standingsController.getTeamStandings);
+router.get(
+  "/:eventId/standings/speakers",
+  standingsController.getSpeakerStandings,
 );
 
 // teams

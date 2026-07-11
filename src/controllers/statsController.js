@@ -3,6 +3,9 @@ const {
   EventParticipant,
   Event,
   Score,
+  Round,
+  Room,
+  RoomTeam,
   sequelize,
 } = require("../models");
 const { Op } = require("sequelize");
@@ -34,15 +37,45 @@ const getUserStats = async (req, res, next) => {
 
     const participantIds = participants.map((p) => p.id);
 
-    // I don't know how the scoring for the other formats works, but
-    // looking at the table schema, it is possible for a speaker to have a score of 1+ from a judge panel in the same room
-    // so this averages across ALL individual judge ballots.
+    // delete the hidden rounds from the stats
+    const hiddenRounds = await Round.findAll({
+      where: { is_hidden: true },
+      attributes: ["id"],
+      raw: true,
+    });
+    const hiddenRoundIds = hiddenRounds.map((r) => r.id);
+
+    let hiddenRoomTeamIds = [];
+    if (hiddenRoundIds.length > 0) {
+      const hiddenRooms = await Room.findAll({
+        where: { round_id: hiddenRoundIds },
+        attributes: ["id"],
+        raw: true,
+      });
+      const hiddenRoomIds = hiddenRooms.map((r) => r.id);
+
+      const hiddenRoomTeams = await RoomTeam.findAll({
+        where: { room_id: hiddenRoomIds },
+        attributes: ["id"],
+        raw: true,
+      });
+      hiddenRoomTeamIds = hiddenRoomTeams.map((rt) => rt.id);
+    }
+
+    const exclusionClause =
+      hiddenRoomTeamIds.length > 0
+        ? { room_team_id: { [Op.notIn]: hiddenRoomTeamIds } }
+        : {};
+
     const scoreStats = await Score.findAll({
       include: [
         {
           model: RoomSpeaker,
           attributes: [],
-          where: { participant_id: participantIds },
+          where: {
+            participant_id: participantIds,
+            ...exclusionClause,
+          },
         },
       ],
       attributes: [
@@ -58,7 +91,11 @@ const getUserStats = async (req, res, next) => {
 
     // only calculating wins (1st Places)
     const rankStats = await RoomSpeaker.findAll({
-      where: { participant_id: participantIds, rank: { [Op.not]: null } },
+      where: {
+        participant_id: participantIds,
+        rank: { [Op.not]: null },
+        ...exclusionClause,
+      },
       attributes: [
         "rank",
         [sequelize.fn("COUNT", sequelize.col("id")), "count"],
