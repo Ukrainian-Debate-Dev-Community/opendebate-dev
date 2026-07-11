@@ -13,6 +13,7 @@ const {
   RoomAdjudicator,
   RoomTeam,
   RoomSpeaker,
+  Score,
 } = require("../src/models");
 const jwt = require("jsonwebtoken");
 
@@ -90,10 +91,21 @@ describe("Scoring and Stats API Endpoints", () => {
       organisation_id: org.id,
       name: "Scoring Event",
     });
+
+    // Standard Visible Round
     const round = await Round.create({
       event_id: event.id,
       name: "Round 1",
       sequence: 1,
+      is_hidden: false,
+    });
+
+    // Secret Hidden Round for Stat Exclusion Test
+    const hiddenRound = await Round.create({
+      event_id: event.id,
+      name: "Secret Final",
+      sequence: 2,
+      is_hidden: true,
     });
 
     const format = await Format.create({
@@ -222,6 +234,35 @@ describe("Scoring and Stats API Endpoints", () => {
       status: "pending",
     });
     noChairRoomId = noChairRoom.id;
+
+    // hidden room with the 1st place for target
+    const hiddenRoom = await Room.create({
+      round_id: hiddenRound.id,
+      format_id: format.id,
+      status: "completed",
+    });
+    const hiddenAdj = await RoomAdjudicator.create({
+      room_id: hiddenRoom.id,
+      participant_id: pChair.id,
+      role: "chair",
+    });
+    const hiddenRt = await RoomTeam.create({
+      room_id: hiddenRoom.id,
+      team_id: team1.id,
+      position: 1,
+      rank: 1,
+    });
+    const hiddenRs = await RoomSpeaker.create({
+      room_team_id: hiddenRt.id,
+      participant_id: pTarget.id,
+      speech_position: 1,
+      rank: 1,
+    });
+    await Score.create({
+      room_speaker_id: hiddenRs.id,
+      room_adjudicator_id: hiddenAdj.id,
+      value: 85,
+    });
   });
 
   afterAll(async () => {
@@ -458,10 +499,12 @@ describe("Scoring and Stats API Endpoints", () => {
       );
     });
 
-    it("should successfully compile and return stats for a ranked speaker", async () => {
+    it("should compile stats strictly from visible rounds, ignoring hidden data", async () => {
+      // despite the target user scoring an 85 and a 1st place in the hidden round,
+      // this endpoint should only compile the 80 and the 1st place from the visible round.
       const res = await request(app)
         .get(`/api/users/${targetUserId}/stats`)
-        .set("Authorization", `Bearer ${randomToken}`); // no restrictions, so should work
+        .set("Authorization", `Bearer ${randomToken}`);
 
       expect(res.statusCode).toEqual(200);
 
@@ -469,10 +512,13 @@ describe("Scoring and Stats API Endpoints", () => {
 
       expect(stats.overview.total_ballots_received).toBe(1);
       expect(stats.overview.total_debates_ranked).toBe(1);
+
+      // shouldn't count the 85 from the hidden round
       expect(stats.overview.average_speaker_score).toBe("80.00");
       expect(stats.overview.highest_score).toBe(80);
       expect(stats.overview.lowest_score).toBe(80);
 
+      // should only show 1 win, not 2
       expect(stats.placements.first_places).toBe(1);
       expect(stats.placements.win_rate_percentage).toBe("100.0");
     });
