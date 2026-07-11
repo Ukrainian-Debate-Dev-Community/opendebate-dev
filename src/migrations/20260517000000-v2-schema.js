@@ -157,6 +157,7 @@ module.exports = {
       name: { type: Sequelize.STRING(64), allowNull: false },
       sequence: { type: Sequelize.SMALLINT, allowNull: false },
       status: { type: Sequelize.STRING(20), defaultValue: "draft" },
+      is_hidden: { type: Sequelize.BOOLEAN, defaultValue: false },
     });
 
     await queryInterface.addConstraint("rounds", {

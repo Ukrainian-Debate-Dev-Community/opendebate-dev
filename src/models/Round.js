@@ -15,6 +15,7 @@ module.exports = (sequelize) => {
           isIn: [["draft", "scheduled", "in_progress", "completed"]],
         },
       },
+      is_hidden: { type: DataTypes.BOOLEAN, defaultValue: false },
     },
     {
       tableName: "rounds",
