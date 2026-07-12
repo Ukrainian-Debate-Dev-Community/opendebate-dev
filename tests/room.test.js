@@ -367,6 +367,56 @@ describe("Room API Endpoints", () => {
       );
     });
 
+    it("should return 409 if attempting to schedule an eliminated permanent team", async () => {
+      await Team.update({ is_eliminated: true }, { where: { id: team1Id } });
+
+      const res = await request(app)
+        .post(`/api/rounds/${roundId}/rooms`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({
+          format_id: formatId,
+          teams: [
+            { team_id: team1Id, position: 1 },
+            { team_id: team2Id, position: 2 },
+          ],
+          adjudicators: [{ participant_id: freeChairId, role: "chair" }],
+        });
+
+      expect(res.statusCode).toEqual(409);
+      expect(res.body.message).toMatch(/Cannot assign eliminated teams/i);
+
+      await Team.update({ is_eliminated: false }, { where: { id: team1Id } });
+    });
+
+    it("should return 409 if attempting to schedule an eliminated speaker", async () => {
+      await EventParticipant.update(
+        { is_eliminated: true },
+        { where: { id: p1 } },
+      );
+
+      const res = await request(app)
+        .post(`/api/rounds/${roundId}/rooms`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({
+          format_id: formatId,
+          teams: [
+            { participant_ids: [p1, p2], name: "Temp Eliminated", position: 1 },
+            { team_id: team2Id, position: 2 },
+          ],
+          adjudicators: [{ participant_id: freeChairId, role: "chair" }],
+        });
+
+      expect(res.statusCode).toEqual(409);
+      expect(res.body.message).toMatch(
+        /Cannot assign eliminated participants/i,
+      );
+
+      await EventParticipant.update(
+        { is_eliminated: false },
+        { where: { id: p1 } },
+      );
+    });
+
     it("should successfully create a room using Permanent Teams", async () => {
       const res = await request(app)
         .post(`/api/rounds/${roundId}/rooms`)

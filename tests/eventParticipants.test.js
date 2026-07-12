@@ -294,6 +294,72 @@ describe("Event Participant API Endpoints", () => {
     });
   });
 
+  // PATCH part
+  describe("PATCH /api/events/:eventId/eliminations", () => {
+    it("should return 400 if status boolean is missing", async () => {
+      const res = await request(app)
+        .patch(`/api/events/${targetEventId}/eliminations`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ participant_ids: [lockedSpeakerId] });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.message).toMatch(/boolean 'status' field is required/i);
+    });
+
+    it("should return 400 if no teams or participants are provided", async () => {
+      const res = await request(app)
+        .patch(`/api/events/${targetEventId}/eliminations`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ status: true, team_ids: [], participant_ids: [] });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.message).toMatch(
+        /provide at least one team_id or participant_id/i,
+      );
+    });
+
+    it("should return 403 if a random user attempts bulk elimination", async () => {
+      const res = await request(app)
+        .patch(`/api/events/${targetEventId}/eliminations`)
+        .set("Authorization", `Bearer ${randomToken}`)
+        .send({ status: true, participant_ids: [lockedSpeakerId] });
+
+      expect(res.statusCode).toEqual(403);
+      expect(res.body.message).toMatch(
+        /You do not have Organiser or Owner privileges for this event/i,
+      );
+    });
+
+    it("should return 400 if attempting to eliminate an adjudicator", async () => {
+      const res = await request(app)
+        .patch(`/api/events/${targetEventId}/eliminations`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({
+          status: true,
+          participant_ids: [lockedAdjudicatorId],
+        });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.message).toMatch(/Adjudicators cannot be eliminated/i);
+    });
+
+    it("should successfully update the elimination status of provided entities", async () => {
+      const res = await request(app)
+        .patch(`/api/events/${targetEventId}/eliminations`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({
+          status: true,
+          participant_ids: [lockedSpeakerId],
+        });
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.message).toMatch(/successfully set to true/i);
+
+      const dbCheck = await EventParticipant.findByPk(lockedSpeakerId);
+      expect(dbCheck.is_eliminated).toBe(true);
+    });
+  });
+
   // DELETE part
   describe("DELETE /api/events/:eventId/participants/:participantId", () => {
     it("should return 409 if attempting to remove a participant assigned to a Team", async () => {
