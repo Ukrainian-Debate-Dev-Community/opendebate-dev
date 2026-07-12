@@ -2,6 +2,7 @@ const crypto = require("crypto");
 const {
   EventParticipant,
   User,
+  Team,
   TeamMember,
   RoomAdjudicator,
   sequelize,
@@ -115,6 +116,64 @@ const updateParticipant = async (req, res, next) => {
   }
 };
 
+const updateEliminations = async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    const { status, team_ids, participant_ids } = req.body;
+
+    if (typeof status !== "boolean") {
+      throw new AppError("A boolean 'status' field is required.", 400);
+    }
+
+    const hasTeams = Array.isArray(team_ids) && team_ids.length > 0;
+    const hasParticipants =
+      Array.isArray(participant_ids) && participant_ids.length > 0;
+
+    if (!hasTeams && !hasParticipants) {
+      throw new AppError(
+        "Please provide at least one team_id or participant_id to update.",
+        400,
+      );
+    }
+
+    if (hasParticipants) {
+      const participants = await EventParticipant.findAll({
+        where: { id: participant_ids, event_id: eventId },
+        attributes: ["id", "role"],
+      });
+
+      const hasAdjudicator = participants.some((p) => p.role === "adjudicator");
+      if (hasAdjudicator) {
+        throw new AppError(
+          "Adjudicators cannot be eliminated. Please remove them from the participant_ids array.",
+          400,
+        );
+      }
+    }
+
+    if (hasTeams) {
+      await Team.update(
+        { is_eliminated: status },
+        { where: { id: team_ids, event_id: eventId } },
+      );
+    }
+
+    if (hasParticipants) {
+      await EventParticipant.update(
+        { is_eliminated: status },
+        { where: { id: participant_ids, event_id: eventId } },
+      );
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: `Elimination status successfully set to ${status}.`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const removeParticipant = async (req, res, next) => {
   try {
     const { participantId } = req.params;
@@ -212,6 +271,7 @@ module.exports = {
   addParticipant,
   getEventParticipants,
   updateParticipant,
+  updateEliminations,
   removeParticipant,
   claimIdentity,
 };

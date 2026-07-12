@@ -19,10 +19,6 @@ const createRoom = async (req, res, next) => {
     const roundId = req.params.roundId;
     const { format_id, motion_id, teams, adjudicators } = req.body;
 
-    // teams payload can now mix and match permanent and temporary teams like below
-    // [{ team_id: 1, position: 1 }, { participant_ids: [3, 4], name: "Temp B", position: 2 }]
-    // adjudicators: [{ participant_id: 5, role: 'chair' }, { participant_id: 6, role: 'panelist' }]
-
     if (!format_id) throw new AppError("format_id is required.", 400);
     if (!Array.isArray(teams) || teams.length === 0)
       throw new AppError("teams must be a non-empty array.", 400);
@@ -145,6 +141,15 @@ const createRoom = async (req, res, next) => {
         include: [{ model: TeamMember }],
         transaction,
       });
+
+      const eliminatedTeams = permanentTeams.filter((t) => t.is_eliminated);
+      if (eliminatedTeams.length > 0) {
+        throw new AppError(
+          "Cannot assign eliminated teams to a new room.",
+          409,
+        );
+      }
+
       permanentTeamsMap = new Map(permanentTeams.map((t) => [t.id, t]));
     }
 
@@ -154,6 +159,17 @@ const createRoom = async (req, res, next) => {
         where: { id: tempSpeakerIds, event_id: eventId },
         transaction,
       });
+
+      const eliminatedSpeakers = validTempSpeakers.filter(
+        (s) => s.is_eliminated,
+      );
+      if (eliminatedSpeakers.length > 0) {
+        throw new AppError(
+          "Cannot assign eliminated participants to a new room.",
+          409,
+        );
+      }
+
       validTempSpeakersMap = new Map(
         validTempSpeakers.map((sp) => [sp.id, sp]),
       );

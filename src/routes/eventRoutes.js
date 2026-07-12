@@ -5,6 +5,7 @@ const roundController = require("../controllers/roundController");
 const feedbackController = require("../controllers/feedbackController");
 const teamController = require("../controllers/teamController");
 const standingsController = require("../controllers/standingsController");
+const eventParticipantController = require("../controllers/eventParticipantController");
 const {
   verifyToken,
   restrictToOwnOrg,
@@ -40,6 +41,13 @@ router.get(
   "/:eventId/feedback",
   restrictToOwnOrg,
   feedbackController.getEventFeedback,
+);
+
+// bulk elimination (team and participants)
+router.patch(
+  "/:eventId/eliminations",
+  restrictToOwnOrg,
+  eventParticipantController.updateEliminations,
 );
 
 // get speaker/team standings
