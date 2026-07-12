@@ -217,7 +217,6 @@ module.exports = {
         references: { model: "event_participants", key: "id" },
         onDelete: "CASCADE",
       },
-      speaker_order: { type: Sequelize.SMALLINT, allowNull: false },
     });
 
     // Rooms
@@ -302,7 +301,6 @@ module.exports = {
         references: { model: "event_participants", key: "id" },
         onDelete: "CASCADE",
       },
-      speech_position: { type: Sequelize.SMALLINT, allowNull: false },
       rank: { type: Sequelize.SMALLINT, allowNull: true },
     });
 

@@ -117,13 +117,11 @@ describe("Standings API Endpoints", () => {
     await RoomSpeaker.create({
       room_team_id: vRt1.id,
       participant_id: p1Id,
-      speech_position: 1,
       rank: 1,
     });
     await RoomSpeaker.create({
       room_team_id: vRt2.id,
       participant_id: p2Id,
-      speech_position: 1,
       rank: 2,
     });
 
@@ -157,13 +155,11 @@ describe("Standings API Endpoints", () => {
     await RoomSpeaker.create({
       room_team_id: hRt1.id,
       participant_id: p1Id,
-      speech_position: 1,
       rank: 2,
     });
     await RoomSpeaker.create({
       room_team_id: hRt2.id,
       participant_id: p2Id,
-      speech_position: 1,
       rank: 1,
     });
   });

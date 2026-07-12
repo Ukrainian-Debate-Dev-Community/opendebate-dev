@@ -7,7 +7,6 @@ module.exports = (sequelize) => {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
       team_id: { type: DataTypes.INTEGER, allowNull: false },
       participant_id: { type: DataTypes.INTEGER, allowNull: false },
-      speaker_order: { type: DataTypes.SMALLINT, allowNull: false },
     },
     { tableName: "team_members" },
   );

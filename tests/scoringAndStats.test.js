@@ -191,22 +191,18 @@ describe("Scoring and Stats API Endpoints", () => {
     const rs1 = await RoomSpeaker.create({
       room_team_id: roomTeam1Id,
       participant_id: pTarget.id,
-      speech_position: 1,
     });
     const rs2 = await RoomSpeaker.create({
       room_team_id: roomTeam1Id,
       participant_id: pS2.id,
-      speech_position: 2,
     });
     const rs3 = await RoomSpeaker.create({
       room_team_id: roomTeam2Id,
       participant_id: pS3.id,
-      speech_position: 1,
     });
     const rs4 = await RoomSpeaker.create({
       room_team_id: roomTeam2Id,
       participant_id: pS4.id,
-      speech_position: 2,
     });
     roomSpeaker1Id = rs1.id;
     roomSpeaker2Id = rs2.id;
@@ -255,7 +251,6 @@ describe("Scoring and Stats API Endpoints", () => {
     const hiddenRs = await RoomSpeaker.create({
       room_team_id: hiddenRt.id,
       participant_id: pTarget.id,
-      speech_position: 1,
       rank: 1,
     });
     await Score.create({

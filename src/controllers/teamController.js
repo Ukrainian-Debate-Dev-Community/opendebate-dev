@@ -16,7 +16,7 @@ const createTeam = async (req, res, next) => {
   try {
     const eventId = req.params.eventId;
     const { name, participant_ids, is_temporary = false } = req.body;
-    // participant_ids expects an ordered array [first_id, second_id ... ], could be duplicates (iron-person)
+    // participant_ids expects an array [first_id, second_id ... ], could be duplicates (iron-person)
 
     if (
       !name ||
@@ -78,11 +78,10 @@ const createTeam = async (req, res, next) => {
       { transaction },
     );
 
-    // map Participants to TeamMembers with their speaking order
-    const membersToInsert = participant_ids.map((id, index) => ({
+    // map Participants to TeamMembers
+    const membersToInsert = participant_ids.map((id) => ({
       team_id: newTeam.id,
       participant_id: id,
-      speaker_order: index + 1,
     }));
 
     await TeamMember.bulkCreate(membersToInsert, { transaction });
@@ -110,7 +109,7 @@ const getEventTeams = async (req, res, next) => {
       include: [
         {
           model: TeamMember,
-          attributes: ["id", "speaker_order"],
+          attributes: ["id"],
           include: [
             {
               model: EventParticipant,
@@ -119,10 +118,7 @@ const getEventTeams = async (req, res, next) => {
           ],
         },
       ],
-      order: [
-        ["id", "ASC"],
-        [TeamMember, "speaker_order", "ASC"],
-      ],
+      order: [["id", "ASC"]],
     });
 
     // clean the payload
@@ -135,7 +131,6 @@ const getEventTeams = async (req, res, next) => {
         participant_id: member.EventParticipant.id,
         name: member.EventParticipant.display_name,
         user_id: member.EventParticipant.user_id,
-        order: member.speaker_order,
       })),
     }));
 
@@ -228,10 +223,9 @@ const updateTeam = async (req, res, next) => {
       // clear old TeamMembers and bulk create new ones
       await TeamMember.destroy({ where: { team_id: teamId }, transaction });
 
-      const membersToInsert = participant_ids.map((id, index) => ({
+      const membersToInsert = participant_ids.map((id) => ({
         team_id: teamId,
         participant_id: id,
-        speaker_order: index + 1,
       }));
       await TeamMember.bulkCreate(membersToInsert, { transaction });
 
@@ -242,10 +236,9 @@ const updateTeam = async (req, res, next) => {
           transaction,
         });
 
-        const speakersToCreate = participant_ids.map((id, index) => ({
+        const speakersToCreate = participant_ids.map((id) => ({
           room_team_id: rt.id,
           participant_id: id,
-          speech_position: index + 1,
         }));
         await RoomSpeaker.bulkCreate(speakersToCreate, { transaction });
       }

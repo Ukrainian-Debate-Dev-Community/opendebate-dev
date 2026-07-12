@@ -153,7 +153,6 @@ describe("Feedback API Endpoints", () => {
     await TeamMember.create({
       team_id: team.id,
       participant_id: speakerId,
-      speaker_order: 1,
     });
 
     // Victim Team
@@ -165,7 +164,6 @@ describe("Feedback API Endpoints", () => {
     await TeamMember.create({
       team_id: teamB.id,
       participant_id: victimSpeakerId,
-      speaker_order: 1,
     });
 
     const room = await Room.create({
@@ -190,7 +188,6 @@ describe("Feedback API Endpoints", () => {
     await RoomSpeaker.create({
       room_team_id: roomTeamA.id,
       participant_id: speakerId,
-      speech_position: 1,
     });
 
     const roomTeamB = await RoomTeam.create({
@@ -201,7 +198,6 @@ describe("Feedback API Endpoints", () => {
     await RoomSpeaker.create({
       room_team_id: roomTeamB.id,
       participant_id: victimSpeakerId,
-      speech_position: 1,
     });
 
     await RoomAdjudicator.create({

@@ -118,7 +118,6 @@ describe("Event Participant API Endpoints", () => {
     await TeamMember.create({
       team_id: team.id,
       participant_id: lockedSpeakerId,
-      speaker_order: 1,
     });
 
     const format = await Format.create({

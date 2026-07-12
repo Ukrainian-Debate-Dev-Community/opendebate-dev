@@ -130,15 +130,15 @@ describe("Room API Endpoints", () => {
     const team1 = await Team.create({ event_id: eventId, name: "Team 1" });
     team1Id = team1.id;
     await TeamMember.bulkCreate([
-      { team_id: team1Id, participant_id: p1, speaker_order: 1 },
-      { team_id: team1Id, participant_id: p2, speaker_order: 2 },
+      { team_id: team1Id, participant_id: p1 },
+      { team_id: team1Id, participant_id: p2 },
     ]);
 
     const team2 = await Team.create({ event_id: eventId, name: "Team 2" });
     team2Id = team2.id;
     await TeamMember.bulkCreate([
-      { team_id: team2Id, participant_id: p3, speaker_order: 1 },
-      { team_id: team2Id, participant_id: p4, speaker_order: 2 },
+      { team_id: team2Id, participant_id: p3 },
+      { team_id: team2Id, participant_id: p4 },
     ]);
 
     // broken team (1 speaker)
@@ -150,7 +150,6 @@ describe("Room API Endpoints", () => {
     await TeamMember.create({
       team_id: brokenTeamId,
       participant_id: p_broken,
-      speaker_order: 1,
     });
 
     // create room for double-book check

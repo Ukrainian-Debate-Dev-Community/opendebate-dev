@@ -197,7 +197,6 @@ describe("Team API Endpoints", () => {
 
       const members = await TeamMember.findAll({ where: { team_id: team1Id } });
       expect(members.length).toBe(2);
-      expect(members[0].speaker_order).toBe(1);
     });
 
     it("should return 409 if a participant is already in a permanent team", async () => {

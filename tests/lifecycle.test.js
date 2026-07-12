@@ -373,17 +373,16 @@ describe("Tournament Lifecycle Stress-Test", () => {
       roomTeamAId = rtA.id;
       roomTeamBId = rtB.id;
 
-      // map speakers to their explicit positions to ensure score processing works
       rtA.RoomSpeakers.forEach((rs) => {
-        // Position 1 or 2 for speakers[0] and speakers[1]
-        const participantId = speakers[rs.speech_position - 1];
-        roomSpeakerIds[participantId] = rs.id;
+        const pId =
+          rs.participant_id || (rs.EventParticipant && rs.EventParticipant.id);
+        if (pId) roomSpeakerIds[pId] = rs.id;
       });
 
       rtB.RoomSpeakers.forEach((rs) => {
-        // Position 1 or 2 for speakers[2] and speakers[3]
-        const participantId = speakers[rs.speech_position + 1];
-        roomSpeakerIds[participantId] = rs.id;
+        const pId =
+          rs.participant_id || (rs.EventParticipant && rs.EventParticipant.id);
+        if (pId) roomSpeakerIds[pId] = rs.id;
       });
     });
   });

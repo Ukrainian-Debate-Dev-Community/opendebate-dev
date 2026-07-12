@@ -199,7 +199,6 @@ const createRoom = async (req, res, next) => {
 
         const speakers = team.TeamMembers.map((tm) => ({
           participant_id: tm.participant_id,
-          order: tm.speaker_order,
         }));
 
         speakers.forEach((s) => allParticipantIdsInRoom.push(s.participant_id));
@@ -251,17 +250,15 @@ const createRoom = async (req, res, next) => {
           { transaction },
         );
 
-        const membersToInsert = teamData.participant_ids.map((id, index) => ({
+        const membersToInsert = teamData.participant_ids.map((id) => ({
           team_id: newTempTeam.id,
           participant_id: id,
-          speaker_order: index + 1,
         }));
 
         await TeamMember.bulkCreate(membersToInsert, { transaction });
 
-        const speakers = teamData.participant_ids.map((id, index) => ({
+        const speakers = teamData.participant_ids.map((id) => ({
           participant_id: id,
-          order: index + 1,
         }));
 
         speakers.forEach((s) => allParticipantIdsInRoom.push(s.participant_id));
@@ -334,7 +331,6 @@ const createRoom = async (req, res, next) => {
       const speakersToCreate = pTeam.speakers.map((sp) => ({
         room_team_id: roomTeam.id,
         participant_id: sp.participant_id,
-        speech_position: sp.order,
       }));
 
       await RoomSpeaker.bulkCreate(speakersToCreate, { transaction });
@@ -376,7 +372,7 @@ const getRoundRooms = async (req, res, next) => {
             { model: Team, attributes: ["id", "name", "is_temporary"] },
             {
               model: RoomSpeaker,
-              attributes: ["id", "speech_position", "rank"],
+              attributes: ["id", "rank"],
               include: [
                 { model: EventParticipant, attributes: ["id", "display_name"] },
               ],
