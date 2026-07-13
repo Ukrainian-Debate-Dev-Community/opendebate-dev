@@ -57,8 +57,23 @@ router.get(
   standingsController.getSpeakerStandings,
 );
 
+// calculated
+router.get(
+  "/:eventId/standings/calculated/teams",
+  standingsController.getCalculatedTeamStandings,
+);
+router.get(
+  "/:eventId/standings/calculated/speakers",
+  standingsController.getCalculatedSpeakerStandings,
+);
+
 // teams
 router.get("/:eventId/teams", teamController.getEventTeams);
+router.get(
+  "/:eventId/teams/auto-generate",
+  restrictToOwnOrg,
+  teamController.generateRandomTeams,
+);
 router.post("/:eventId/teams", restrictToOwnOrg, teamController.createTeam);
 router.put(
   "/:eventId/teams/:teamId",

@@ -26,6 +26,7 @@ describe("Team API Endpoints", () => {
 
   let p1, p2, p3, p4, p5;
   let team1Id;
+  let formatId;
 
   beforeAll(async () => {
     // wipe and sync
@@ -78,6 +79,7 @@ describe("Team API Endpoints", () => {
       score_min: 50,
       score_max: 100,
     });
+    formatId = format.id;
 
     const round = await Round.create({
       event_id: eventId,
@@ -256,7 +258,7 @@ describe("Team API Endpoints", () => {
     });
   });
 
-  // GET part
+  // GET ALL part
   describe("GET /api/events/:eventId/teams", () => {
     it("should successfully fetch all teams for an event", async () => {
       const res = await request(app)
@@ -275,6 +277,51 @@ describe("Team API Endpoints", () => {
       expect(res.statusCode).toEqual(200);
       expect(res.body.data.length).toBe(1);
       expect(res.body.data[0].name).toBe("Team A");
+    });
+  });
+
+  // GET Shuffle part
+  describe("GET /api/events/:eventId/teams/auto-generate", () => {
+    it("should return 400 if the format_id query parameter is missing", async () => {
+      const res = await request(app)
+        .get(`/api/events/${eventId}/teams/auto-generate`)
+        .set("Authorization", `Bearer ${ownerToken}`);
+
+      expect(res.statusCode).toEqual(400);
+    });
+
+    it("should group free speakers into temporary teams without committing to the database", async () => {
+      const initialTempTeamsCount = await Team.count({
+        where: { event_id: eventId, is_temporary: true },
+      });
+
+      const res = await request(app)
+        .get(`/api/events/${eventId}/teams/auto-generate?format_id=${formatId}`)
+        .set("Authorization", `Bearer ${ownerToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.status).toBe("success");
+
+      const responseData = res.body.data;
+      if (responseData.proposed_teams.length > 0) {
+        expect(responseData.proposed_teams[0]).toHaveProperty(
+          "participant_ids",
+        );
+      }
+
+      // count shouldn't change, since it's a read-only
+      const finalTempTeamsCount = await Team.count({
+        where: { event_id: eventId, is_temporary: true },
+      });
+      expect(finalTempTeamsCount).toBe(initialTempTeamsCount);
+    });
+
+    it("should return 403 if a random user attempts to auto-generate teams", async () => {
+      const res = await request(app)
+        .get(`/api/events/${eventId}/teams/auto-generate?format_id=${formatId}`)
+        .set("Authorization", `Bearer ${randomToken}`);
+
+      expect(res.statusCode).toEqual(403);
     });
   });
 

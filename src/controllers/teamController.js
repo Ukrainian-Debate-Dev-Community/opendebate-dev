@@ -6,6 +6,7 @@ const {
   Room,
   RoomSpeaker,
   RoomTeam,
+  Format,
   sequelize,
 } = require("../models");
 const { Op } = require("sequelize");
@@ -90,6 +91,70 @@ const createTeam = async (req, res, next) => {
     res.status(201).json({ status: "success", data: newTeam });
   } catch (error) {
     await transaction.rollback();
+    next(error);
+  }
+};
+
+const generateRandomTeams = async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    const { format_id } = req.query;
+
+    if (!format_id) {
+      throw new AppError("format_id is required as a query parameter.", 400);
+    }
+
+    const format = await Format.findByPk(format_id);
+    if (!format) throw new AppError("Format not found.", 404);
+
+    // fetch all active speakers (not eliminated)
+    const allSpeakers = await EventParticipant.findAll({
+      where: { event_id: eventId, role: "speaker", is_eliminated: false },
+      attributes: ["id", "display_name"],
+      raw: true,
+    });
+
+    // fetch speakers already locked into Permanent Teams
+    const permanentMembers = await TeamMember.findAll({
+      include: [
+        {
+          model: Team,
+          required: true,
+          attributes: [],
+          where: { event_id: eventId, is_temporary: false },
+        },
+      ],
+      attributes: ["participant_id"],
+      raw: true,
+    });
+
+    const busyIds = new Set(permanentMembers.map((m) => m.participant_id));
+
+    const freeSpeakers = allSpeakers.filter((s) => !busyIds.has(s.id));
+
+    const shuffled = freeSpeakers.sort(() => 0.5 - Math.random());
+
+    const proposedTeams = [];
+    const chunkSize = format.speakers_per_team;
+
+    for (let i = 0; i < shuffled.length; i += chunkSize) {
+      const chunk = shuffled.slice(i, i + chunkSize);
+
+      proposedTeams.push({
+        name: `Random Team ${Math.floor(i / chunkSize) + 1}`,
+        participant_ids: chunk.map((c) => c.id),
+        participants: chunk,
+      });
+    }
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        total_free_speakers: freeSpeakers.length,
+        proposed_teams: proposedTeams,
+      },
+    });
+  } catch (error) {
     next(error);
   }
 };
@@ -283,4 +348,10 @@ const deleteTeam = async (req, res, next) => {
   }
 };
 
-module.exports = { createTeam, getEventTeams, updateTeam, deleteTeam };
+module.exports = {
+  createTeam,
+  generateRandomTeams,
+  getEventTeams,
+  updateTeam,
+  deleteTeam,
+};

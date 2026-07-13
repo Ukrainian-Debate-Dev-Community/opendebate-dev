@@ -13,6 +13,8 @@ const {
   Room,
   RoomTeam,
   RoomSpeaker,
+  RoomAdjudicator,
+  Score,
 } = require("../src/models");
 const jwt = require("jsonwebtoken");
 
@@ -221,6 +223,98 @@ describe("Standings API Endpoints", () => {
 
       expect(standings[p1Id].rooms[visibleRoomId]).toBe(1);
       expect(standings[p1Id].rooms[hiddenRoomId]).toBeUndefined();
+    });
+  });
+
+  // CALCULATED STANDINGS part
+  describe("Calculated Standings: GET /api/events/:eventId/standings/calculated/...", () => {
+    beforeAll(async () => {
+      const dummyAdj = await EventParticipant.create({
+        event_id: eventId,
+        display_name: "Math Judge",
+        role: "adjudicator",
+      });
+      const vAdj = await RoomAdjudicator.create({
+        room_id: visibleRoomId,
+        participant_id: dummyAdj.id,
+        role: "chair",
+      });
+      const hAdj = await RoomAdjudicator.create({
+        room_id: hiddenRoomId,
+        participant_id: dummyAdj.id,
+        role: "chair",
+      });
+
+      const speakers = await RoomSpeaker.findAll({ order: [["id", "ASC"]] });
+
+      for (let i = 0; i < speakers.length; i++) {
+        const adjId = i < 2 ? vAdj.id : hAdj.id;
+        await Score.create({
+          room_speaker_id: speakers[i].id,
+          room_adjudicator_id: adjId,
+          value: 80,
+        });
+      }
+    });
+
+    it("Random User views Team Standings (Only Visible Round - Team A is Leader)", async () => {
+      const res = await request(app)
+        .get(`/api/events/${eventId}/standings/calculated/teams`)
+        .set("Authorization", `Bearer ${randomToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      const standings = res.body.data;
+
+      expect(standings[0].id).toBe(teamAId);
+      expect(standings[0].total_points).toBe(1);
+
+      expect(standings[1].id).toBe(teamBId);
+      expect(standings[1].total_points).toBe(0);
+    });
+
+    it("Random User views Speaker Standings (Only Visible Round - Speaker 1 is Leader)", async () => {
+      const res = await request(app)
+        .get(`/api/events/${eventId}/standings/calculated/speakers`)
+        .set("Authorization", `Bearer ${randomToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      const standings = res.body.data;
+
+      expect(standings[0].id).toBe(p1Id);
+      expect(standings[0].total_points).toBe(88);
+
+      expect(standings[1].id).toBe(p2Id);
+      expect(standings[1].total_points).toBe(80);
+    });
+
+    it("Owner views Team Standings (Both Rounds - Mathematical Tie)", async () => {
+      const res = await request(app)
+        .get(`/api/events/${eventId}/standings/calculated/teams`)
+        .set("Authorization", `Bearer ${ownerToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      const standings = res.body.data;
+
+      const teamA = standings.find((t) => t.id === teamAId);
+      const teamB = standings.find((t) => t.id === teamBId);
+
+      expect(teamA.total_points).toBe(1);
+      expect(teamB.total_points).toBe(1);
+    });
+
+    it("Owner views Speaker Standings (Both Rounds - Mathematical Tie)", async () => {
+      const res = await request(app)
+        .get(`/api/events/${eventId}/standings/calculated/speakers`)
+        .set("Authorization", `Bearer ${ownerToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      const standings = res.body.data;
+
+      const p1 = standings.find((s) => s.id === p1Id);
+      const p2 = standings.find((s) => s.id === p2Id);
+
+      expect(p1.total_points).toBe(168);
+      expect(p2.total_points).toBe(168);
     });
   });
 });
