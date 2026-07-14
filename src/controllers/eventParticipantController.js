@@ -8,30 +8,57 @@ const {
   sequelize,
 } = require("../models");
 const AppError = require("../utils/AppError");
+const { hasEventPrivilege } = require("../middleware/authMiddleware");
 
 const addParticipant = async (req, res, next) => {
   try {
     const eventId = req.params.eventId;
-    const { user_id, display_name, role } = req.body;
+    let { user_id, display_name, role } = req.body;
+    const callerId = req.user.id;
+    const isAdmin = req.user.isAdmin;
 
     if (!display_name || !role) {
       throw new AppError("Display name and role are required.", 400);
+    }
+
+    // determine if the caller has any privileges for this event
+    const isPrivileged = await hasEventPrivilege(
+      callerId,
+      isAdmin,
+      Number(eventId),
+    );
+
+    if (!isPrivileged) {
+      // if a standard user tries to register someone else, block it
+      if (user_id && user_id !== callerId) {
+        throw new AppError(
+          "Unauthorised: You can only register yourself for this event.",
+          403,
+        );
+      }
+      user_id = callerId;
     }
 
     let claimToken = null;
     let claimTokenHash = null;
 
     if (!user_id) {
-      // Guest Registration
+      if (!isPrivileged) {
+        throw new AppError(
+          "Unauthorised: Only tournament Organisers can create guest participants.",
+          403,
+        );
+      }
+
       claimToken = crypto.randomBytes(16).toString("hex");
       claimTokenHash = crypto
         .createHash("sha256")
         .update(claimToken)
         .digest("hex");
     } else {
-      // Platform User Registration
       const existingUser = await User.findByPk(user_id);
-      if (!existingUser) throw new AppError("User not found.", 404);
+      if (!existingUser || existingUser.is_deleted)
+        throw new AppError("User not found.", 404);
 
       const alreadyJoined = await EventParticipant.findOne({
         where: { event_id: eventId, user_id },
