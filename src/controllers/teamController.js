@@ -334,6 +334,18 @@ const deleteTeam = async (req, res, next) => {
     });
     if (!team) throw new AppError("Team not found in this event.", 404);
 
+    const roomTeams = await RoomTeam.findAll({
+      where: { team_id: teamId },
+      transaction,
+    });
+
+    if (roomTeams.length > 0) {
+      throw new AppError(
+        "Cannot dissolve a team that is currently assigned to a room. Please delete the room or remove the team from the matchup first.",
+        409,
+      );
+    }
+
     // disband the team
     await team.destroy({ transaction });
 

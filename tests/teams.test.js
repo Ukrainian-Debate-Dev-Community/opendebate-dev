@@ -410,6 +410,23 @@ describe("Team API Endpoints", () => {
       expect(res.body.message).toMatch(/Team not found/i);
     });
 
+    it("should return 409 if attempting to delete a team assigned to a room", async () => {
+      const roomTeam = await RoomTeam.create({
+        room_id: activeRoomId,
+        team_id: team1Id,
+        position: 1,
+      });
+
+      const res = await request(app)
+        .delete(`/api/events/${eventId}/teams/${team1Id}`)
+        .set("Authorization", `Bearer ${ownerToken}`);
+
+      expect(res.statusCode).toEqual(409);
+      expect(res.body.message).toMatch(/currently assigned to a room/i);
+
+      await roomTeam.destroy();
+    });
+
     it("should successfully delete a team", async () => {
       const res = await request(app)
         .delete(`/api/events/${eventId}/teams/${team1Id}`)
