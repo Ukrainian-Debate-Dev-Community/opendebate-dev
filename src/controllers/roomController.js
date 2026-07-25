@@ -190,16 +190,24 @@ const createRoom = async (req, res, next) => {
             404,
           );
         }
-        if (team.TeamMembers.length !== format.speakers_per_team) {
+
+        // now allow teams with fewer members than required (but > 0)
+        if (
+          team.TeamMembers.length === 0 ||
+          team.TeamMembers.length > format.speakers_per_team
+        ) {
           throw new AppError(
-            `Team '${team.name}' does not have the required ${format.speakers_per_team} speakers.`,
+            `Team '${team.name}' has an invalid number of speakers (${team.TeamMembers.length}). Format allows up to ${format.speakers_per_team}.`,
             400,
           );
         }
 
-        const speakers = team.TeamMembers.map((tm) => ({
-          participant_id: tm.participant_id,
-        }));
+        // ironman is duplicated only in the RoomSpeaker table
+        const speakers = [];
+        for (let i = 0; i < format.speakers_per_team; i++) {
+          const member = team.TeamMembers[i] || team.TeamMembers[0];
+          speakers.push({ participant_id: member.participant_id });
+        }
 
         speakers.forEach((s) => allParticipantIdsInRoom.push(s.participant_id));
         processedTeams.push({
@@ -215,9 +223,14 @@ const createRoom = async (req, res, next) => {
             400,
           );
         }
-        if (teamData.participant_ids.length !== format.speakers_per_team) {
+
+        // also allow fewer members for dynamic ironman generation
+        if (
+          teamData.participant_ids.length === 0 ||
+          teamData.participant_ids.length > format.speakers_per_team
+        ) {
           throw new AppError(
-            `Temporary team '${teamData.name}' does not have the required ${format.speakers_per_team} speakers.`,
+            `Temporary team '${teamData.name}' has an invalid number of speakers. Format allows up to ${format.speakers_per_team}.`,
             400,
           );
         }
@@ -250,6 +263,7 @@ const createRoom = async (req, res, next) => {
           { transaction },
         );
 
+        // members are no longer duplicated
         const membersToInsert = teamData.participant_ids.map((id) => ({
           team_id: newTempTeam.id,
           participant_id: id,
@@ -257,9 +271,13 @@ const createRoom = async (req, res, next) => {
 
         await TeamMember.bulkCreate(membersToInsert, { transaction });
 
-        const speakers = teamData.participant_ids.map((id) => ({
-          participant_id: id,
-        }));
+        // ironman is duplicated only in the RoomSpeaker table
+        const speakers = [];
+        for (let i = 0; i < format.speakers_per_team; i++) {
+          const pId =
+            teamData.participant_ids[i] || teamData.participant_ids[0];
+          speakers.push({ participant_id: pId });
+        }
 
         speakers.forEach((s) => allParticipantIdsInRoom.push(s.participant_id));
         processedTeams.push({

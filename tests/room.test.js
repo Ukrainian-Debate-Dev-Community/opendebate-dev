@@ -328,23 +328,25 @@ describe("Room API Endpoints", () => {
       );
     });
 
-    it("should return 400 if a team does not have the correct number of speakers for the format", async () => {
+    it("should return 400 if a team has more speakers than the format allows", async () => {
       const res = await request(app)
         .post(`/api/rounds/${roundId}/rooms`)
         .set("Authorization", `Bearer ${ownerToken}`)
         .send({
           format_id: formatId,
           teams: [
-            { team_id: team1Id, position: 1 },
-            { team_id: brokenTeamId, position: 2 },
+            {
+              participant_ids: [p1, p2, p3],
+              name: "Oversized Temp",
+              position: 1,
+            }, // 3 speakers in a 2 speaker format
+            { team_id: team2Id, position: 2 },
           ],
           adjudicators: [{ participant_id: chairId, role: "chair" }],
         });
 
       expect(res.statusCode).toEqual(400);
-      expect(res.body.message).toMatch(
-        /does not have the required 2 speakers/i,
-      );
+      expect(res.body.message).toMatch(/has an invalid number of speakers/i);
     });
 
     it("should return 409 if attempting to double-book an adjudicator already in a room", async () => {
@@ -498,6 +500,38 @@ describe("Room API Endpoints", () => {
         order: [["id", "DESC"]],
       });
       roomWithTempTeamId = rooms[0].id;
+    });
+
+    it("should successfully create a room with Ironman teams (fewer speakers than format requires)", async () => {
+      const ironChair = await EventParticipant.create({
+        event_id: eventId,
+        display_name: "Iron Chair",
+        role: "adjudicator",
+      });
+      const soloTemp = await EventParticipant.create({
+        event_id: eventId,
+        display_name: "Solo Temp",
+        role: "speaker",
+      });
+
+      const res = await request(app)
+        .post(`/api/rounds/${roundId}/rooms`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({
+          format_id: formatId,
+          teams: [
+            { team_id: brokenTeamId, position: 1 }, // permanent Ironman (initially broken team)
+            {
+              participant_ids: [soloTemp.id],
+              name: "Temp Ironman",
+              position: 2,
+            },
+          ],
+          adjudicators: [{ participant_id: ironChair.id, role: "chair" }],
+        });
+
+      expect(res.statusCode).toEqual(201);
+      expect(res.body.message).toMatch(/Room created successfully/i);
     });
   });
 
