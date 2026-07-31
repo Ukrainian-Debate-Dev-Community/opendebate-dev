@@ -1,11 +1,18 @@
 const request = require("supertest");
 const app = require("../src/app");
-const { sequelize, User } = require("../src/models");
+const {
+  sequelize,
+  User,
+  Event,
+  EventParticipant,
+  Organisation,
+} = require("../src/models");
 const bcrypt = require("bcryptjs");
 
 describe("User API Endpoints", () => {
   let userToken;
   let userId;
+  let testOrgId;
 
   beforeAll(async () => {
     // wipe and sync
@@ -16,6 +23,13 @@ describe("User API Endpoints", () => {
       username: "taken_username",
       password: "hashedpassword123",
     });
+
+    const org = await Organisation.create({
+      name: "Test Org",
+      type: "academic",
+      status: "active",
+    });
+    testOrgId = org.id;
   });
 
   afterAll(async () => {
@@ -208,6 +222,128 @@ describe("User API Endpoints", () => {
       expect(res.body.message).toMatch(
         /A record with that information already exists/i,
       );
+    });
+  });
+
+  // GET HISTORY and SCHEDULE part
+  describe("GET /api/users/history and GET /api/users/schedule", () => {
+    let now;
+
+    beforeAll(async () => {
+      now = new Date();
+      // 10 and 5 days ago/future
+      const pastDate1 = new Date(now.getTime() - 10 * 24 * 60 * 60 * 1000);
+      const pastDate2 = new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000);
+      const futureDate1 = new Date(now.getTime() + 5 * 24 * 60 * 60 * 1000);
+      const futureDate2 = new Date(now.getTime() + 10 * 24 * 60 * 60 * 1000);
+
+      // completed Event
+      const pastEvent1 = await Event.create({
+        organisation_id: testOrgId,
+        name: "Past Event 1",
+        status: "completed",
+        start_date: pastDate1,
+        end_date: pastDate1,
+      });
+
+      // scheduled Event but end date passed
+      const pastEvent2 = await Event.create({
+        organisation_id: testOrgId,
+        name: "Past Event 2",
+        status: "scheduled",
+        start_date: pastDate2,
+        end_date: pastDate2,
+      });
+
+      // upcoming Event
+      const futureEvent1 = await Event.create({
+        organisation_id: testOrgId,
+        name: "Future Event 1",
+        status: "scheduled",
+        start_date: futureDate1,
+        end_date: futureDate1,
+      });
+
+      // further upcoming Event
+      const futureEvent2 = await Event.create({
+        organisation_id: testOrgId,
+        name: "Future Event 2",
+        status: "scheduled",
+        start_date: futureDate2,
+        end_date: futureDate2,
+      });
+
+      // assign roles to the active test user
+      await EventParticipant.bulkCreate([
+        {
+          event_id: pastEvent1.id,
+          user_id: userId,
+          display_name: "Me",
+          role: "speaker",
+        },
+        {
+          event_id: pastEvent2.id,
+          user_id: userId,
+          display_name: "Me",
+          role: "adjudicator",
+        },
+        {
+          event_id: futureEvent1.id,
+          user_id: userId,
+          display_name: "Me",
+          role: "speaker",
+        },
+        {
+          event_id: futureEvent2.id,
+          user_id: userId,
+          display_name: "Me",
+          role: "speaker",
+        },
+      ]);
+    });
+
+    it("should retrieve paginated past events, separated by role, sorted most recent first", async () => {
+      const res = await request(app)
+        .get("/api/users/history")
+        .set("Authorization", `Bearer ${userToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.status).toBe("success");
+
+      // role separation
+      expect(res.body.data.as_adjudicator.length).toBe(1);
+      expect(res.body.data.as_player.length).toBe(1);
+
+      // data mapping
+      expect(res.body.data.as_adjudicator[0].name).toBe("Past Event 2");
+      expect(res.body.data.as_player[0].name).toBe("Past Event 1");
+    });
+
+    it("should retrieve paginated upcoming events, separated by role, sorted closest first", async () => {
+      const res = await request(app)
+        .get("/api/users/schedule")
+        .set("Authorization", `Bearer ${userToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.status).toBe("success");
+
+      // role separation
+      expect(res.body.data.as_adjudicator.length).toBe(0);
+      expect(res.body.data.as_player.length).toBe(2);
+
+      // data mapping
+      expect(res.body.data.as_player[0].name).toBe("Future Event 1");
+      expect(res.body.data.as_player[1].name).toBe("Future Event 2");
+    });
+
+    it("should respect pagination limits on schedule route", async () => {
+      const res = await request(app)
+        .get("/api/users/schedule?limit=1")
+        .set("Authorization", `Bearer ${userToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.data.as_player.length).toBe(1);
+      expect(res.body.data.as_player[0].name).toBe("Future Event 1");
     });
   });
 
