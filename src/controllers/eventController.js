@@ -1,6 +1,21 @@
 const { Event, sequelize } = require("../models");
 const AppError = require("../utils/AppError");
 
+const checkEventAccess = async (req, res, next) => {
+  try {
+    const eventId = req.params.eventId;
+    const userId = req.user.id;
+    const isAdmin = req.user.isAdmin;
+
+    const { hasEventPrivilege } = require("../middleware/authMiddleware");
+    const isPrivileged = await hasEventPrivilege(userId, isAdmin, eventId);
+
+    res.status(200).json({ status: "success", data: { isPrivileged } });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const createEvent = async (req, res, next) => {
   try {
     const { name, start_date, end_date, is_ranked } = req.body;
@@ -100,6 +115,7 @@ const deleteEvent = async (req, res, next) => {
 };
 
 module.exports = {
+  checkEventAccess,
   createEvent,
   getOrganisationEvents,
   updateEvent,

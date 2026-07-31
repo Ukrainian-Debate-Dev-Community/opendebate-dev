@@ -25,6 +25,8 @@ router.use("/:eventId/participants", participantRoutes);
 router.use("/:eventId/organizers", organizerRoutes);
 router.use("/:eventId/conflicts", conflictRoutes);
 
+router.get("/:eventId/access", eventController.checkEventAccess);
+
 // creating round and reading all
 router.get("/:eventId/rounds", roundController.getEventRounds);
 router.post("/:eventId/rounds", restrictToOwnOrg, roundController.createRound);
