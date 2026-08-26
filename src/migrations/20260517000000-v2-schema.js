@@ -141,7 +141,7 @@ module.exports = {
       },
       display_name: { type: Sequelize.STRING(120), allowNull: false },
       role: { type: Sequelize.STRING(20), allowNull: false }, // speaker or adjudicator
-      is_waitlist: { type: Sequelize.BOOLEAN, defaultValue: true },
+      is_eliminated: { type: Sequelize.BOOLEAN, defaultValue: false },
       claim_token_hash: { type: Sequelize.STRING(255), allowNull: true },
       claim_token_used_at: { type: Sequelize.DATE, allowNull: true },
     });
@@ -158,6 +158,7 @@ module.exports = {
       name: { type: Sequelize.STRING(64), allowNull: false },
       sequence: { type: Sequelize.SMALLINT, allowNull: false },
       status: { type: Sequelize.STRING(20), defaultValue: "draft" },
+      is_hidden: { type: Sequelize.BOOLEAN, defaultValue: false },
     });
 
     await queryInterface.addConstraint("rounds", {
@@ -184,19 +185,21 @@ module.exports = {
     // Teams
     await queryInterface.createTable("teams", {
       id: { type: Sequelize.INTEGER, primaryKey: true, autoIncrement: true },
-      round_id: {
+      event_id: {
         type: Sequelize.INTEGER,
         allowNull: false,
-        references: { model: "rounds", key: "id" },
+        references: { model: "events", key: "id" },
         onDelete: "CASCADE",
       },
       name: { type: Sequelize.STRING(120), allowNull: false },
+      is_temporary: { type: Sequelize.BOOLEAN, defaultValue: false },
+      is_eliminated: { type: Sequelize.BOOLEAN, defaultValue: false },
     });
 
     await queryInterface.addConstraint("teams", {
-      fields: ["round_id", "name"],
+      fields: ["event_id", "name"],
       type: "unique",
-      name: "unique_team_name_per_round",
+      name: "unique_team_name_per_event",
     });
 
     // Team Members
@@ -214,7 +217,6 @@ module.exports = {
         references: { model: "event_participants", key: "id" },
         onDelete: "CASCADE",
       },
-      speaker_order: { type: Sequelize.SMALLINT, allowNull: false },
     });
 
     // Rooms
@@ -299,7 +301,6 @@ module.exports = {
         references: { model: "event_participants", key: "id" },
         onDelete: "CASCADE",
       },
-      speech_position: { type: Sequelize.SMALLINT, allowNull: false },
       rank: { type: Sequelize.SMALLINT, allowNull: true },
     });
 
@@ -320,11 +321,94 @@ module.exports = {
       },
       value: { type: Sequelize.SMALLINT, allowNull: false },
     });
+
+    // Feedbacks
+    await queryInterface.createTable("feedbacks", {
+      id: { type: Sequelize.INTEGER, primaryKey: true, autoIncrement: true },
+      room_id: {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        references: { model: "rooms", key: "id" },
+        onDelete: "CASCADE",
+      },
+      adjudicator_id: {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        references: { model: "event_participants", key: "id" },
+        onDelete: "CASCADE",
+      },
+      issuer_participant_id: {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: { model: "event_participants", key: "id" },
+        onDelete: "CASCADE",
+      },
+      issuer_team_id: {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: { model: "teams", key: "id" },
+        onDelete: "CASCADE",
+      },
+      score: { type: Sequelize.SMALLINT, allowNull: false },
+      comment: { type: Sequelize.TEXT, allowNull: true },
+    });
+
+    // enforce exclusive issuer constraint
+    await queryInterface.sequelize.query(`
+      ALTER TABLE feedbacks
+      ADD CONSTRAINT check_exclusive_issuer
+      CHECK (
+        (issuer_participant_id IS NOT NULL AND issuer_team_id IS NULL) OR
+        (issuer_participant_id IS NULL AND issuer_team_id IS NOT NULL)
+      );
+    `);
+
+    // Conflicts
+    await queryInterface.createTable("conflicts", {
+      id: { type: Sequelize.INTEGER, primaryKey: true, autoIncrement: true },
+      event_id: {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        references: { model: "events", key: "id" },
+        onDelete: "CASCADE",
+      },
+      issuer_participant_id: {
+        type: Sequelize.INTEGER,
+        allowNull: false,
+        references: { model: "event_participants", key: "id" },
+        onDelete: "CASCADE",
+      },
+      target_participant_id: {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: { model: "event_participants", key: "id" },
+        onDelete: "CASCADE",
+      },
+      target_team_id: {
+        type: Sequelize.INTEGER,
+        allowNull: true,
+        references: { model: "teams", key: "id" },
+        onDelete: "CASCADE",
+      },
+      comment: { type: Sequelize.TEXT, allowNull: true },
+    });
+
+    // enforce exclusive target constraint
+    await queryInterface.sequelize.query(`
+      ALTER TABLE conflicts
+      ADD CONSTRAINT check_exclusive_conflict_target
+      CHECK (
+        (target_participant_id IS NOT NULL AND target_team_id IS NULL) OR
+        (target_participant_id IS NULL AND target_team_id IS NOT NULL)
+      );
+    `);
   },
 
   async down(queryInterface, Sequelize) {
     // drop all tables
     const v2Tables = [
+      "conflicts",
+      "feedbacks",
       "scores",
       "room_speakers",
       "room_adjudicators",

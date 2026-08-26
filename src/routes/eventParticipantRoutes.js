@@ -5,7 +5,7 @@ const { restrictToOwnOrg } = require("../middleware/authMiddleware");
 
 // inherited path /api/events/:eventId/participants
 router.get("/", participantController.getEventParticipants);
-router.post("/", restrictToOwnOrg, participantController.addParticipant);
+router.post("/", participantController.addParticipant);
 router.put(
   "/:participantId",
   restrictToOwnOrg,

@@ -13,7 +13,7 @@ module.exports = (sequelize) => {
         allowNull: false,
         validate: { isIn: [["speaker", "adjudicator"]] },
       },
-      is_waitlist: { type: DataTypes.BOOLEAN, defaultValue: true },
+      is_eliminated: { type: DataTypes.BOOLEAN, defaultValue: false },
       claim_token_hash: { type: DataTypes.STRING(255), allowNull: true },
       claim_token_used_at: { type: DataTypes.DATE, allowNull: true },
     },
@@ -33,6 +33,18 @@ module.exports = (sequelize) => {
     });
     EventParticipant.hasMany(models.RoomSpeaker, {
       foreignKey: "participant_id",
+      onDelete: "CASCADE",
+    });
+
+    EventParticipant.hasMany(models.Conflict, {
+      as: "IssuedConflicts",
+      foreignKey: "issuer_participant_id",
+      onDelete: "CASCADE",
+    });
+
+    EventParticipant.hasMany(models.Conflict, {
+      as: "TargetedConflicts",
+      foreignKey: "target_participant_id",
       onDelete: "CASCADE",
     });
   };

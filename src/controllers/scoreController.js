@@ -3,7 +3,6 @@ const {
   RoomTeam,
   RoomSpeaker,
   RoomAdjudicator,
-  EventParticipant,
   Format,
   Score,
   sequelize,
@@ -15,8 +14,6 @@ const submitScores = async (req, res, next) => {
 
   try {
     const roomId = req.params.roomId;
-    const userId = req.user.id; // the authenticated user
-    const isAdmin = req.user.isAdmin;
     const { teamRankings, speakerScores } = req.body;
 
     /* Expected Payload Format:
@@ -88,24 +85,17 @@ const submitScores = async (req, res, next) => {
       }
     }
 
-    // now fetch the Chair's ID and compare to the requester's
+    // authorisation is already guaranteed by the middleware
+    // yet still need to fetch the Chair's ID to attribute the scores to them
     const adjudicatorRecord = await RoomAdjudicator.findOne({
       where: { room_id: roomId, role: "chair" },
-      include: [
-        {
-          model: EventParticipant,
-          attributes: ["user_id"],
-        },
-      ],
       transaction,
     });
 
-    const isChair = adjudicatorRecord.EventParticipant.user_id === userId;
-
-    if (!isChair && !isAdmin) {
+    if (!adjudicatorRecord) {
       throw new AppError(
-        "Unauthorised: Only the designated Chair can submit the final ballot.",
-        403,
+        "Cannot submit scores. This room lacks a designated chair.",
+        400,
       );
     }
     const roomAdjudicatorId = adjudicatorRecord.id;

@@ -1,7 +1,14 @@
 const bcrypt = require("bcryptjs");
 const crypto = require("crypto");
 const jwt = require("jsonwebtoken");
-const { User, Admin, sequelize } = require("../models");
+const {
+  User,
+  Admin,
+  Event,
+  EventParticipant,
+  sequelize,
+} = require("../models");
+const { Op } = require("sequelize");
 const AppError = require("../utils/AppError");
 
 // helper to sign tokens with user_id (and isAdmin so middleware can skip an Admin lookup per request)
@@ -190,10 +197,110 @@ const deleteUser = async (req, res, next) => {
   }
 };
 
+const getUserHistory = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 5;
+    const offset = (page - 1) * limit;
+
+    // Events that are either marked completed or their end date has passed
+    const whereEvent = {
+      is_deleted: false,
+      [Op.or]: [{ status: "completed" }, { end_date: { [Op.lt]: new Date() } }],
+    };
+
+    const fetchByRole = async (role) => {
+      const participants = await EventParticipant.findAll({
+        where: { user_id: userId, role },
+        include: [
+          {
+            model: Event,
+            where: whereEvent,
+            required: true,
+          },
+        ],
+        order: [[Event, "start_date", "DESC"]],
+        limit,
+        offset,
+      });
+      return participants.map((p) => p.Event);
+    };
+
+    const [as_adjudicator, as_player] = await Promise.all([
+      fetchByRole("adjudicator"),
+      fetchByRole("speaker"),
+    ]);
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        as_adjudicator,
+        as_player,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getUserSchedule = async (req, res, next) => {
+  try {
+    const userId = req.user.id;
+    const page = parseInt(req.query.page, 10) || 1;
+    const limit = parseInt(req.query.limit, 10) || 5;
+    const offset = (page - 1) * limit;
+
+    // active or upcoming Events whose end date has NOT passed
+    const whereEvent = {
+      is_deleted: false,
+      status: { [Op.in]: ["scheduled", "in_progress"] },
+      [Op.or]: [
+        { end_date: { [Op.gte]: new Date() } },
+        { end_date: null }, // if no date is set, rely purely on status
+      ],
+    };
+
+    const fetchByRole = async (role) => {
+      const participants = await EventParticipant.findAll({
+        where: { user_id: userId, role },
+        include: [
+          {
+            model: Event,
+            where: whereEvent,
+            required: true,
+          },
+        ],
+        order: [[Event, "start_date", "ASC"]],
+        limit,
+        offset,
+      });
+      return participants.map((p) => p.Event);
+    };
+
+    const [as_adjudicator, as_player] = await Promise.all([
+      fetchByRole("adjudicator"),
+      fetchByRole("speaker"),
+    ]);
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        as_adjudicator,
+        as_player,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createUser,
   login,
   updatePassword,
   updateUsername,
   deleteUser,
+  getUserHistory,
+  getUserSchedule,
 };

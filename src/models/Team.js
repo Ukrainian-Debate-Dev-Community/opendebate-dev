@@ -5,29 +5,29 @@ module.exports = (sequelize) => {
     "Team",
     {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
-      round_id: { type: DataTypes.INTEGER, allowNull: false },
+      event_id: { type: DataTypes.INTEGER, allowNull: false },
       name: { type: DataTypes.STRING(120), allowNull: false },
+      is_temporary: { type: DataTypes.BOOLEAN, defaultValue: false },
+      is_eliminated: { type: DataTypes.BOOLEAN, defaultValue: false },
     },
-    {
-      tableName: "teams",
-      indexes: [
-        {
-          unique: true,
-          fields: ["round_id", "name"],
-          name: "unique_team_name_per_round",
-        },
-      ],
-    },
+    { tableName: "teams", timestamps: false },
   );
 
   Team.associate = (models) => {
-    Team.belongsTo(models.Round, { foreignKey: "round_id" });
+    Team.belongsTo(models.Event, { foreignKey: "event_id" });
     Team.hasMany(models.TeamMember, {
       foreignKey: "team_id",
       onDelete: "CASCADE",
     });
-    Team.hasOne(models.RoomTeam, {
+
+    // a single team can now appear in multiple room_teams
+    Team.hasMany(models.RoomTeam, {
       foreignKey: "team_id",
+      onDelete: "CASCADE",
+    });
+
+    Team.hasMany(models.Conflict, {
+      foreignKey: "target_team_id",
       onDelete: "CASCADE",
     });
   };

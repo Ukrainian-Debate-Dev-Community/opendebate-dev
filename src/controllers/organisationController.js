@@ -50,6 +50,7 @@ const getAllOrganisations = async (req, res, next) => {
   try {
     const organisations = await Organisation.findAll({
       where: { status: "active", is_deleted: false },
+      include: [{ model: User, as: "Owners", attributes: ["id", "username"] }],
     });
     res.status(200).json({ status: "success", data: organisations });
   } catch (error) {

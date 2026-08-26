@@ -277,6 +277,39 @@ describe("Round API Endpoints", () => {
     });
   });
 
+  // PATCH part
+  describe("PATCH /api/events/:eventId/rounds/release-all", () => {
+    it("should return 403 if a random user tries to release rounds", async () => {
+      const res = await request(app)
+        .patch(`/api/events/${activeEventId}/rounds/release-all`)
+        .set("Authorization", `Bearer ${randomToken}`);
+
+      expect(res.statusCode).toEqual(403);
+    });
+
+    it("should allow an Owner/Organiser to reveal all hidden rounds globally", async () => {
+      const hiddenRound = await Round.create({
+        event_id: activeEventId,
+        name: "Secret Final",
+        sequence: 99,
+        is_hidden: true,
+      });
+
+      const res = await request(app)
+        .patch(`/api/events/${activeEventId}/rounds/release-all`)
+        .set("Authorization", `Bearer ${ownerToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.message).toMatch(
+        /have been released and are now visible/i,
+      );
+
+      // verify the database state
+      const dbCheck = await Round.findByPk(hiddenRound.id);
+      expect(dbCheck.is_hidden).toBe(false);
+    });
+  });
+
   // DELETE part
   describe("DELETE /api/rounds/:roundId", () => {
     it("should return 403 if a random user attempts to delete a round", async () => {

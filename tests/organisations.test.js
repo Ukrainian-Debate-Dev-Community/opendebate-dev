@@ -188,13 +188,21 @@ describe("Organisation API Endpoints", () => {
 
   // GET ALL part
   describe("GET /api/organisations", () => {
-    it("should retrieve all active and non-deleted organisations", async () => {
+    it("should retrieve all active and non-deleted organisations and include their owners", async () => {
       const res = await request(app)
         .get("/api/organisations")
         .set("Authorization", `Bearer ${randomToken}`); // no restrictions on the route, so should work
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.data.length).toBeGreaterThanOrEqual(2);
+
+      // verify the joined Owner payload
+      const org = res.body.data.find((o) => o.id === standardOrgId);
+      expect(org).toBeDefined();
+      expect(org.Owners).toBeDefined();
+      expect(Array.isArray(org.Owners)).toBe(true);
+      expect(org.Owners[0].id).toBe(ownerId);
+      expect(org.Owners[0].username).toBe("org_owner");
     });
   });
 
@@ -207,8 +215,12 @@ describe("Organisation API Endpoints", () => {
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.data.id).toBe(standardOrgId);
+
+      // verify the joined Owner payload
       expect(res.body.data.Owners).toBeDefined();
+      expect(Array.isArray(res.body.data.Owners)).toBe(true);
       expect(res.body.data.Owners[0].id).toBe(ownerId);
+      expect(res.body.data.Owners[0].username).toBe("org_owner");
     });
 
     it("should return 404 if the organisation is inactive or deleted", async () => {

@@ -29,6 +29,10 @@ router.put("/password", userController.updatePassword);
 router.put("/username", userController.updateUsername);
 router.delete("/", userController.deleteUser);
 
+// user event history and upcoming schedule
+router.get("/history", userController.getUserHistory);
+router.get("/schedule", userController.getUserSchedule);
+
 // stats and identity
 router.get("/:id/stats", statsController.getUserStats);
 router.post(

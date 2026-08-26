@@ -2,10 +2,11 @@ const {
   Team,
   TeamMember,
   EventParticipant,
-  Round,
+  Event,
   Room,
   RoomSpeaker,
   RoomTeam,
+  Format,
   sequelize,
 } = require("../models");
 const { Op } = require("sequelize");
@@ -14,9 +15,9 @@ const AppError = require("../utils/AppError");
 const createTeam = async (req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
-    const roundId = req.params.roundId;
-    const { name, participant_ids } = req.body;
-    // participant_ids expects an ordered array [first_id, second_id ... ], could be duplicates (iron-person)
+    const eventId = req.params.eventId;
+    const { name, participant_ids, is_temporary = false } = req.body;
+    // participant_ids expects an array [first_id, second_id ... ], could be duplicates (iron-person)
 
     if (
       !name ||
@@ -30,15 +31,15 @@ const createTeam = async (req, res, next) => {
       );
     }
 
-    const round = await Round.findByPk(roundId, { transaction });
-    if (!round) throw new AppError("Round not found.", 404);
+    const event = await Event.findByPk(eventId, { transaction });
+    if (!event) throw new AppError("Event not found.", 404);
 
     const uniqueParticipantIds = [...new Set(participant_ids)];
 
     const validParticipants = await EventParticipant.findAll({
       where: {
         id: uniqueParticipantIds,
-        event_id: round.event_id,
+        event_id: eventId,
       },
       transaction,
     });
@@ -50,36 +51,38 @@ const createTeam = async (req, res, next) => {
       );
     }
 
-    // none of these participants are already in a team (this round)
-    const existingMemberships = await TeamMember.findAll({
-      where: { participant_id: participant_ids },
-      include: [
-        {
-          model: Team,
-          required: true,
-          where: { round_id: roundId },
-        },
-      ],
-      transaction,
-    });
+    // PERMANENT TEAMS: enforce one-team-per-event rule
+    // TEMPORARY TEAMS: bypass this so speakers can form new pairs in subsequent rounds
+    if (!is_temporary) {
+      const existingMemberships = await TeamMember.findAll({
+        where: { participant_id: participant_ids },
+        include: [
+          {
+            model: Team,
+            required: true,
+            where: { event_id: eventId, is_temporary: false },
+          },
+        ],
+        transaction,
+      });
 
-    if (existingMemberships.length > 0) {
-      throw new AppError(
-        "One or more participants are already assigned to a team in this round.",
-        409,
-      );
+      if (existingMemberships.length > 0) {
+        throw new AppError(
+          "One or more participants are already assigned to a permanent team in this event.",
+          409,
+        );
+      }
     }
 
     const newTeam = await Team.create(
-      { round_id: roundId, name },
+      { event_id: eventId, name, is_temporary, is_eliminated: false },
       { transaction },
     );
 
-    // map Participants to TeamMembers with their speaking order
-    const membersToInsert = participant_ids.map((id, index) => ({
+    // map Participants to TeamMembers
+    const membersToInsert = participant_ids.map((id) => ({
       team_id: newTeam.id,
       participant_id: id,
-      speaker_order: index + 1,
     }));
 
     await TeamMember.bulkCreate(membersToInsert, { transaction });
@@ -92,16 +95,86 @@ const createTeam = async (req, res, next) => {
   }
 };
 
-const getRoundTeams = async (req, res, next) => {
+const generateRandomTeams = async (req, res, next) => {
   try {
-    const roundId = req.params.roundId;
+    const { eventId } = req.params;
+    const { format_id } = req.query;
+
+    if (!format_id) {
+      throw new AppError("format_id is required as a query parameter.", 400);
+    }
+
+    const format = await Format.findByPk(format_id);
+    if (!format) throw new AppError("Format not found.", 404);
+
+    // fetch all active speakers (not eliminated)
+    const allSpeakers = await EventParticipant.findAll({
+      where: { event_id: eventId, role: "speaker", is_eliminated: false },
+      attributes: ["id", "display_name"],
+      raw: true,
+    });
+
+    // fetch speakers already locked into Permanent Teams
+    const permanentMembers = await TeamMember.findAll({
+      include: [
+        {
+          model: Team,
+          required: true,
+          attributes: [],
+          where: { event_id: eventId, is_temporary: false },
+        },
+      ],
+      attributes: ["participant_id"],
+      raw: true,
+    });
+
+    const busyIds = new Set(permanentMembers.map((m) => m.participant_id));
+
+    const freeSpeakers = allSpeakers.filter((s) => !busyIds.has(s.id));
+
+    const shuffled = freeSpeakers.sort(() => 0.5 - Math.random());
+
+    const proposedTeams = [];
+    const chunkSize = format.speakers_per_team;
+
+    for (let i = 0; i < shuffled.length; i += chunkSize) {
+      const chunk = shuffled.slice(i, i + chunkSize);
+
+      proposedTeams.push({
+        name: `Random Team ${Math.floor(i / chunkSize) + 1}`,
+        participant_ids: chunk.map((c) => c.id),
+        participants: chunk,
+      });
+    }
+
+    res.status(200).json({
+      status: "success",
+      data: {
+        total_free_speakers: freeSpeakers.length,
+        proposed_teams: proposedTeams,
+      },
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const getEventTeams = async (req, res, next) => {
+  try {
+    const eventId = req.params.eventId;
+    const { is_temporary } = req.query; // filter if needed
+
+    const whereClause = { event_id: eventId };
+    if (is_temporary !== undefined) {
+      whereClause.is_temporary = is_temporary === "true";
+    }
 
     const teams = await Team.findAll({
-      where: { round_id: roundId },
+      where: whereClause,
       include: [
         {
           model: TeamMember,
-          attributes: ["id", "speaker_order"],
+          attributes: ["id"],
           include: [
             {
               model: EventParticipant,
@@ -110,21 +183,19 @@ const getRoundTeams = async (req, res, next) => {
           ],
         },
       ],
-      order: [
-        ["id", "ASC"],
-        [TeamMember, "speaker_order", "ASC"],
-      ],
+      order: [["id", "ASC"]],
     });
 
     // clean the payload
     const formattedTeams = teams.map((team) => ({
       id: team.id,
       name: team.name,
+      is_temporary: team.is_temporary,
+      is_eliminated: team.is_eliminated,
       speakers: team.TeamMembers.map((member) => ({
         participant_id: member.EventParticipant.id,
         name: member.EventParticipant.display_name,
         user_id: member.EventParticipant.user_id,
-        order: member.speaker_order,
       })),
     }));
 
@@ -138,17 +209,17 @@ const updateTeam = async (req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
     const teamId = req.params.teamId;
+    const eventId = req.params.eventId;
     const { name, participant_ids } = req.body;
 
-    const team = await Team.findByPk(teamId, {
-      include: [TeamMember, Round], // now I also need Round to get the event_id
+    const team = await Team.findOne({
+      where: { id: teamId, event_id: eventId },
+      include: [TeamMember],
       transaction,
     });
+    if (!team) throw new AppError("Team not found in this event.", 404);
 
-    if (!team) throw new AppError("Team not found.", 404);
-
-    const roundId = team.round_id;
-    const eventId = team.Round.event_id;
+    const isTemporary = team.is_temporary;
 
     if (name) team.name = name;
 
@@ -169,29 +240,33 @@ const updateTeam = async (req, res, next) => {
         );
       }
 
-      const existingMemberships = await TeamMember.findAll({
-        where: { participant_id: participant_ids },
-        include: [
-          {
-            model: Team,
-            required: true,
-            where: {
-              round_id: roundId,
-              id: { [Op.ne]: teamId }, // exclude the current team from the duplicate check
+      // PERMANENT TEAMS: check for duplicates when updating a roster
+      if (!isTemporary) {
+        const existingMemberships = await TeamMember.findAll({
+          where: { participant_id: participant_ids },
+          include: [
+            {
+              model: Team,
+              required: true,
+              where: {
+                event_id: eventId,
+                is_temporary: false,
+                id: { [Op.ne]: teamId }, // exclude current team
+              },
             },
-          },
-        ],
-        transaction,
-      });
+          ],
+          transaction,
+        });
 
-      if (existingMemberships.length > 0) {
-        throw new AppError(
-          "One or more participants are already assigned to a team in this round.",
-          409,
-        );
+        if (existingMemberships.length > 0) {
+          throw new AppError(
+            "One or more participants are already assigned to another permanent team in this event.",
+            409,
+          );
+        }
       }
 
-      // is the team in an active/completed room
+      // check if the team is in an active/completed room
       const roomTeams = await RoomTeam.findAll({
         where: { team_id: teamId },
         transaction,
@@ -210,68 +285,25 @@ const updateTeam = async (req, res, next) => {
         }
       }
 
-      const oldParticipantIds = team.TeamMembers.map((tm) => tm.participant_id);
-
       // clear old TeamMembers and bulk create new ones
       await TeamMember.destroy({ where: { team_id: teamId }, transaction });
 
-      const membersToInsert = participant_ids.map((id, index) => ({
+      const membersToInsert = participant_ids.map((id) => ({
         team_id: teamId,
         participant_id: id,
-        speaker_order: index + 1,
       }));
       await TeamMember.bulkCreate(membersToInsert, { transaction });
 
-      // waitlist management
-      const removedIds = oldParticipantIds.filter(
-        (id) => !participant_ids.includes(id),
-      );
-
-      if (removedIds.length > 0) {
-        // only return to the waitlist participants who aren't on any
-        // other team — a participant on a team in another round is still
-        // active and shouldn't be re-listed as available.
-        const stillOnOtherTeam = await TeamMember.findAll({
-          where: {
-            participant_id: removedIds,
-            team_id: { [Op.ne]: teamId },
-          },
-          attributes: ["participant_id"],
-          transaction,
-        });
-        const stillActiveIds = new Set(
-          stillOnOtherTeam.map((m) => m.participant_id),
-        );
-        const trulyRemovedIds = removedIds.filter(
-          (id) => !stillActiveIds.has(id),
-        );
-
-        if (trulyRemovedIds.length > 0) {
-          await EventParticipant.update(
-            { is_waitlist: true },
-            { where: { id: trulyRemovedIds }, transaction },
-          );
-        }
-      }
-      if (participant_ids.length > 0) {
-        // new members are removed from waitlist
-        await EventParticipant.update(
-          { is_waitlist: false },
-          { where: { id: participant_ids }, transaction },
-        );
-      }
-
-      // delete Speakers and create the new ones
+      // Sync RoomSpeakers
       for (const rt of roomTeams) {
         await RoomSpeaker.destroy({
           where: { room_team_id: rt.id },
           transaction,
         });
 
-        const speakersToCreate = participant_ids.map((id, index) => ({
+        const speakersToCreate = participant_ids.map((id) => ({
           room_team_id: rt.id,
           participant_id: id,
-          speech_position: index + 1,
         }));
         await RoomSpeaker.bulkCreate(speakersToCreate, { transaction });
       }
@@ -293,48 +325,34 @@ const deleteTeam = async (req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
     const teamId = req.params.teamId;
+    const eventId = req.params.eventId;
 
-    const team = await Team.findByPk(teamId, {
+    const team = await Team.findOne({
+      where: { id: teamId, event_id: eventId },
       include: [TeamMember],
       transaction,
     });
+    if (!team) throw new AppError("Team not found in this event.", 404);
 
-    if (!team) throw new AppError("Team not found.", 404);
+    const roomTeams = await RoomTeam.findAll({
+      where: { team_id: teamId },
+      transaction,
+    });
 
-    // players to return to the waitlist pool
-    const participantIds = team.TeamMembers.map((tm) => tm.participant_id);
-
-    // disand the team
-    await team.destroy({ transaction });
-
-    if (participantIds.length > 0) {
-      // only re-list participants who aren't on any other team
-      // (a participant on another team in any round is still active).
-      const stillOnOtherTeam = await TeamMember.findAll({
-        where: { participant_id: participantIds },
-        attributes: ["participant_id"],
-        transaction,
-      });
-      const stillActiveIds = new Set(
-        stillOnOtherTeam.map((m) => m.participant_id),
+    if (roomTeams.length > 0) {
+      throw new AppError(
+        "Cannot dissolve a team that is currently assigned to a room. Please delete the room or remove the team from the matchup first.",
+        409,
       );
-      const trulyFreedIds = participantIds.filter(
-        (id) => !stillActiveIds.has(id),
-      );
-
-      if (trulyFreedIds.length > 0) {
-        await EventParticipant.update(
-          { is_waitlist: true },
-          { where: { id: trulyFreedIds }, transaction },
-        );
-      }
     }
+
+    // disband the team
+    await team.destroy({ transaction });
 
     await transaction.commit();
     res.status(200).json({
       status: "success",
-      message:
-        "Team dissolved successfully. Participants returned to the available pool.",
+      message: "Team dissolved successfully.",
     });
   } catch (error) {
     await transaction.rollback();
@@ -342,4 +360,10 @@ const deleteTeam = async (req, res, next) => {
   }
 };
 
-module.exports = { createTeam, getRoundTeams, updateTeam, deleteTeam };
+module.exports = {
+  createTeam,
+  generateRandomTeams,
+  getEventTeams,
+  updateTeam,
+  deleteTeam,
+};

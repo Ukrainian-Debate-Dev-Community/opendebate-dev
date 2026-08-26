@@ -3,19 +3,24 @@ const app = require("../src/app");
 const {
   sequelize,
   User,
+  Admin,
   Organisation,
   Owner,
   Event,
   Round,
+  Organizer,
 } = require("../src/models");
 const jwt = require("jsonwebtoken");
 
 describe("Event API Endpoints", () => {
+  let adminToken;
   let ownerToken;
+  let organizerToken;
   let unauthorizedOwnerToken;
   let randomToken;
 
   let ownerId;
+  let organizerId;
   let unauthorizedOwnerId;
 
   let targetOrgId;
@@ -28,6 +33,19 @@ describe("Event API Endpoints", () => {
     // wipe and sync
     await sequelize.sync({ force: true });
 
+    // create an Admin User
+    const adminUser = await User.create({
+      username: "admin_user",
+      password: "hashedpassword123",
+    });
+    await Admin.create({ user_id: adminUser.id });
+
+    adminToken = jwt.sign(
+      { id: adminUser.id, isAdmin: true },
+      process.env.JWT_SECRET || "testsecret",
+      { expiresIn: "1h" },
+    );
+
     // create the primary Org Owner User
     const orgOwner = await User.create({
       username: "event_owner",
@@ -37,6 +55,19 @@ describe("Event API Endpoints", () => {
 
     ownerToken = jwt.sign(
       { id: orgOwner.id, isAdmin: false },
+      process.env.JWT_SECRET || "testsecret",
+      { expiresIn: "1h" },
+    );
+
+    // create a designated Organizer User
+    const orgUser = await User.create({
+      username: "event_organizer",
+      password: "hashedpassword123",
+    });
+    organizerId = orgUser.id;
+
+    organizerToken = jwt.sign(
+      { id: orgUser.id, isAdmin: false },
       process.env.JWT_SECRET || "testsecret",
       { expiresIn: "1h" },
     );
@@ -100,6 +131,12 @@ describe("Event API Endpoints", () => {
       is_deleted: false,
     });
     softDeleteEventId = softDeleteEvent.id;
+
+    // assign the Organizer to this event
+    await Organizer.create({
+      user_id: organizerId,
+      event_id: softDeleteEventId,
+    });
 
     await Round.create({
       event_id: softDeleteEventId,
@@ -185,6 +222,63 @@ describe("Event API Endpoints", () => {
         (e) => e.organisation_id === targetOrgId,
       );
       expect(allBelongToTargetOrg).toBe(true);
+    });
+  });
+
+  // GET ACCESS part
+  describe("GET /api/events/:eventId/access", () => {
+    it("should return true for an Admin", async () => {
+      const res = await request(app)
+        .get(`/api/events/${softDeleteEventId}/access`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.data.isPrivileged).toBe(true);
+    });
+
+    it("should return true for the Organisation Owner", async () => {
+      const res = await request(app)
+        .get(`/api/events/${softDeleteEventId}/access`)
+        .set("Authorization", `Bearer ${ownerToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.data.isPrivileged).toBe(true);
+    });
+
+    it("should return true for a designated Event Organizer", async () => {
+      const res = await request(app)
+        .get(`/api/events/${softDeleteEventId}/access`)
+        .set("Authorization", `Bearer ${organizerToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.data.isPrivileged).toBe(true);
+    });
+
+    it("should return false for a random user", async () => {
+      const res = await request(app)
+        .get(`/api/events/${softDeleteEventId}/access`)
+        .set("Authorization", `Bearer ${randomToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.data.isPrivileged).toBe(false);
+    });
+
+    it("should return false for an Owner of a different organisation", async () => {
+      const res = await request(app)
+        .get(`/api/events/${softDeleteEventId}/access`)
+        .set("Authorization", `Bearer ${unauthorizedOwnerToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.data.isPrivileged).toBe(false);
+    });
+
+    it("should return 404 if the event does not exist", async () => {
+      const res = await request(app)
+        .get(`/api/events/999999/access`)
+        .set("Authorization", `Bearer ${ownerToken}`);
+
+      expect(res.statusCode).toEqual(404);
+      expect(res.body.message).toMatch(/Event not found/i);
     });
   });
 

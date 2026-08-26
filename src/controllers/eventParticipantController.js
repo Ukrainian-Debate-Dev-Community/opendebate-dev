@@ -2,35 +2,63 @@ const crypto = require("crypto");
 const {
   EventParticipant,
   User,
+  Team,
   TeamMember,
   RoomAdjudicator,
   sequelize,
 } = require("../models");
 const AppError = require("../utils/AppError");
+const { hasEventPrivilege } = require("../middleware/authMiddleware");
 
 const addParticipant = async (req, res, next) => {
   try {
     const eventId = req.params.eventId;
-    const { user_id, display_name, role, is_waitlist = true } = req.body;
+    let { user_id, display_name, role } = req.body;
+    const callerId = req.user.id;
+    const isAdmin = req.user.isAdmin;
 
     if (!display_name || !role) {
       throw new AppError("Display name and role are required.", 400);
+    }
+
+    // determine if the caller has any privileges for this event
+    const isPrivileged = await hasEventPrivilege(
+      callerId,
+      isAdmin,
+      Number(eventId),
+    );
+
+    if (!isPrivileged) {
+      // if a standard user tries to register someone else, block it
+      if (user_id && user_id !== callerId) {
+        throw new AppError(
+          "Unauthorised: You can only register yourself for this event.",
+          403,
+        );
+      }
+      user_id = callerId;
     }
 
     let claimToken = null;
     let claimTokenHash = null;
 
     if (!user_id) {
-      // Guest Registration
+      if (!isPrivileged) {
+        throw new AppError(
+          "Unauthorised: Only tournament Organisers can create guest participants.",
+          403,
+        );
+      }
+
       claimToken = crypto.randomBytes(16).toString("hex");
       claimTokenHash = crypto
         .createHash("sha256")
         .update(claimToken)
         .digest("hex");
     } else {
-      // Platform User Registration
       const existingUser = await User.findByPk(user_id);
-      if (!existingUser) throw new AppError("User not found.", 404);
+      if (!existingUser || existingUser.is_deleted)
+        throw new AppError("User not found.", 404);
 
       const alreadyJoined = await EventParticipant.findOne({
         where: { event_id: eventId, user_id },
@@ -45,7 +73,6 @@ const addParticipant = async (req, res, next) => {
       user_id: user_id || null,
       display_name,
       role,
-      is_waitlist: is_waitlist,
       claim_token_hash: claimTokenHash,
     });
 
@@ -97,14 +124,16 @@ const getEventParticipants = async (req, res, next) => {
 const updateParticipant = async (req, res, next) => {
   try {
     const { participantId } = req.params;
-    const { display_name, role, is_waitlist } = req.body;
+    const { display_name, role } = req.body;
 
-    const participant = await EventParticipant.findByPk(participantId);
-    if (!participant) throw new AppError("Participant not found.", 404);
+    const participant = await EventParticipant.findOne({
+      where: { id: participantId, event_id: req.params.eventId },
+    });
+    if (!participant)
+      throw new AppError("Participant not found in this event.", 404);
 
     if (display_name) participant.display_name = display_name;
     if (role) participant.role = role;
-    if (is_waitlist !== undefined) participant.is_waitlist = is_waitlist;
 
     await participant.save();
 
@@ -114,12 +143,72 @@ const updateParticipant = async (req, res, next) => {
   }
 };
 
+const updateEliminations = async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    const { status, team_ids, participant_ids } = req.body;
+
+    if (typeof status !== "boolean") {
+      throw new AppError("A boolean 'status' field is required.", 400);
+    }
+
+    const hasTeams = Array.isArray(team_ids) && team_ids.length > 0;
+    const hasParticipants =
+      Array.isArray(participant_ids) && participant_ids.length > 0;
+
+    if (!hasTeams && !hasParticipants) {
+      throw new AppError(
+        "Please provide at least one team_id or participant_id to update.",
+        400,
+      );
+    }
+
+    if (hasParticipants) {
+      const participants = await EventParticipant.findAll({
+        where: { id: participant_ids, event_id: eventId },
+        attributes: ["id", "role"],
+      });
+
+      const hasAdjudicator = participants.some((p) => p.role === "adjudicator");
+      if (hasAdjudicator) {
+        throw new AppError(
+          "Adjudicators cannot be eliminated. Please remove them from the participant_ids array.",
+          400,
+        );
+      }
+    }
+
+    if (hasTeams) {
+      await Team.update(
+        { is_eliminated: status },
+        { where: { id: team_ids, event_id: eventId } },
+      );
+    }
+
+    if (hasParticipants) {
+      await EventParticipant.update(
+        { is_eliminated: status },
+        { where: { id: participant_ids, event_id: eventId } },
+      );
+    }
+
+    res.status(200).json({
+      status: "success",
+      message: `Elimination status successfully set to ${status}.`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const removeParticipant = async (req, res, next) => {
   try {
     const { participantId } = req.params;
-    const participant = await EventParticipant.findByPk(participantId);
-
-    if (!participant) throw new AppError("Participant not found.", 404);
+    const participant = await EventParticipant.findOne({
+      where: { id: participantId, event_id: req.params.eventId },
+    });
+    if (!participant)
+      throw new AppError("Participant not found in this event.", 404);
 
     // refuse removal while the participant is still attached to debate
     // state — pulling them out from under a team/room would orphan scores
@@ -209,6 +298,7 @@ module.exports = {
   addParticipant,
   getEventParticipants,
   updateParticipant,
+  updateEliminations,
   removeParticipant,
   claimIdentity,
 };

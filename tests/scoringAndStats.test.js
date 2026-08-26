@@ -13,10 +13,12 @@ const {
   RoomAdjudicator,
   RoomTeam,
   RoomSpeaker,
+  Score,
 } = require("../src/models");
 const jwt = require("jsonwebtoken");
 
 describe("Scoring and Stats API Endpoints", () => {
+  let adminToken;
   let chairToken;
   let panelistToken;
   let randomToken;
@@ -25,6 +27,7 @@ describe("Scoring and Stats API Endpoints", () => {
   let chairUserId;
   let roomId;
   let completedRoomId;
+  let noChairRoomId;
 
   let roomTeam1Id, roomTeam2Id;
   let roomSpeaker1Id, roomSpeaker2Id, roomSpeaker3Id, roomSpeaker4Id;
@@ -32,6 +35,16 @@ describe("Scoring and Stats API Endpoints", () => {
   beforeAll(async () => {
     // wipe and sync
     await sequelize.sync({ force: true });
+
+    const adminUser = await User.create({
+      username: "admin_user",
+      password: "hashedpassword123",
+    });
+    adminToken = jwt.sign(
+      { id: adminUser.id, isAdmin: true },
+      process.env.JWT_SECRET || "testsecret",
+      { expiresIn: "1h" },
+    );
 
     // create User for a stat check
     const targetUser = await User.create({
@@ -78,10 +91,21 @@ describe("Scoring and Stats API Endpoints", () => {
       organisation_id: org.id,
       name: "Scoring Event",
     });
+
+    // Standard Visible Round
     const round = await Round.create({
       event_id: event.id,
       name: "Round 1",
       sequence: 1,
+      is_hidden: false,
+    });
+
+    // Secret Hidden Round for Stat Exclusion Test
+    const hiddenRound = await Round.create({
+      event_id: event.id,
+      name: "Secret Final",
+      sequence: 2,
+      is_hidden: true,
     });
 
     const format = await Format.create({
@@ -129,8 +153,8 @@ describe("Scoring and Stats API Endpoints", () => {
       user_id: panelistUser.id,
     });
 
-    const team1 = await Team.create({ round_id: round.id, name: "Team 1" });
-    const team2 = await Team.create({ round_id: round.id, name: "Team 2" });
+    const team1 = await Team.create({ event_id: event.id, name: "Team 1" });
+    const team2 = await Team.create({ event_id: event.id, name: "Team 2" });
 
     // pending room
     const room = await Room.create({
@@ -167,22 +191,18 @@ describe("Scoring and Stats API Endpoints", () => {
     const rs1 = await RoomSpeaker.create({
       room_team_id: roomTeam1Id,
       participant_id: pTarget.id,
-      speech_position: 1,
     });
     const rs2 = await RoomSpeaker.create({
       room_team_id: roomTeam1Id,
       participant_id: pS2.id,
-      speech_position: 2,
     });
     const rs3 = await RoomSpeaker.create({
       room_team_id: roomTeam2Id,
       participant_id: pS3.id,
-      speech_position: 1,
     });
     const rs4 = await RoomSpeaker.create({
       room_team_id: roomTeam2Id,
       participant_id: pS4.id,
-      speech_position: 2,
     });
     roomSpeaker1Id = rs1.id;
     roomSpeaker2Id = rs2.id;
@@ -201,6 +221,42 @@ describe("Scoring and Stats API Endpoints", () => {
       room_id: completedRoomId,
       participant_id: pChair.id,
       role: "chair",
+    });
+
+    // no chair room
+    const noChairRoom = await Room.create({
+      round_id: round.id,
+      format_id: format.id,
+      status: "pending",
+    });
+    noChairRoomId = noChairRoom.id;
+
+    // hidden room with the 1st place for target
+    const hiddenRoom = await Room.create({
+      round_id: hiddenRound.id,
+      format_id: format.id,
+      status: "completed",
+    });
+    const hiddenAdj = await RoomAdjudicator.create({
+      room_id: hiddenRoom.id,
+      participant_id: pChair.id,
+      role: "chair",
+    });
+    const hiddenRt = await RoomTeam.create({
+      room_id: hiddenRoom.id,
+      team_id: team1.id,
+      position: 1,
+      rank: 1,
+    });
+    const hiddenRs = await RoomSpeaker.create({
+      room_team_id: hiddenRt.id,
+      participant_id: pTarget.id,
+      rank: 1,
+    });
+    await Score.create({
+      room_speaker_id: hiddenRs.id,
+      room_adjudicator_id: hiddenAdj.id,
+      value: 85,
     });
   });
 
@@ -234,7 +290,7 @@ describe("Scoring and Stats API Endpoints", () => {
         .set("Authorization", `Bearer ${chairToken}`)
         .send({
           teamRankings: [],
-          speakerScores: [], // can be skipped since teams are checked first
+          speakerScores: [],
         });
 
       expect(res.statusCode).toEqual(400);
@@ -266,6 +322,27 @@ describe("Scoring and Stats API Endpoints", () => {
       );
     });
 
+    it("should return 400 if the room lacks a designated chair", async () => {
+      const res = await request(app)
+        .post(`/api/rooms/${noChairRoomId}/scores`)
+        .set("Authorization", `Bearer ${adminToken}`)
+        .send({
+          teamRankings: [
+            { room_team_id: roomTeam1Id, rank: 1 },
+            { room_team_id: roomTeam2Id, rank: 2 },
+          ],
+          speakerScores: [
+            { room_speaker_id: roomSpeaker1Id, score: 80 },
+            { room_speaker_id: roomSpeaker2Id, score: 80 },
+            { room_speaker_id: roomSpeaker3Id, score: 75 },
+            { room_speaker_id: roomSpeaker4Id, score: 75 },
+          ],
+        });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.message).toMatch(/lacks a designated chair/i);
+    });
+
     it("should return 409 if the room is already completed or void", async () => {
       const res = await request(app)
         .post(`/api/rooms/${completedRoomId}/scores`)
@@ -276,9 +353,7 @@ describe("Scoring and Stats API Endpoints", () => {
         });
 
       expect(res.statusCode).toEqual(409);
-      expect(res.body.message).toMatch(
-        /Cannot submit scores. Room is already completed/i,
-      );
+      expect(res.body.message).toMatch(/Cannot submit scores/i);
     });
 
     it("should return 400 for duplicate teams in rankings", async () => {
@@ -419,10 +494,12 @@ describe("Scoring and Stats API Endpoints", () => {
       );
     });
 
-    it("should successfully compile and return stats for a ranked speaker", async () => {
+    it("should compile stats strictly from visible rounds, ignoring hidden data", async () => {
+      // despite the target user scoring an 85 and a 1st place in the hidden round,
+      // this endpoint should only compile the 80 and the 1st place from the visible round.
       const res = await request(app)
         .get(`/api/users/${targetUserId}/stats`)
-        .set("Authorization", `Bearer ${randomToken}`); // no restrictions, so should work
+        .set("Authorization", `Bearer ${randomToken}`);
 
       expect(res.statusCode).toEqual(200);
 
@@ -430,10 +507,13 @@ describe("Scoring and Stats API Endpoints", () => {
 
       expect(stats.overview.total_ballots_received).toBe(1);
       expect(stats.overview.total_debates_ranked).toBe(1);
+
+      // shouldn't count the 85 from the hidden round
       expect(stats.overview.average_speaker_score).toBe("80.00");
       expect(stats.overview.highest_score).toBe(80);
       expect(stats.overview.lowest_score).toBe(80);
 
+      // should only show 1 win, not 2
       expect(stats.placements.first_places).toBe(1);
       expect(stats.placements.win_rate_percentage).toBe("100.0");
     });

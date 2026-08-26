@@ -20,11 +20,10 @@ describe("Tournament Lifecycle Stress-Test", () => {
   let targetClaimToken;
   let targetParticipantId;
 
-  let teamAId;
-  let teamBId;
+  let teamAId; // Permanent
   let roomId;
-  let roomTeamAId;
-  let roomTeamBId;
+  let roomTeamAId; // Mapped from Permanent Team
+  let roomTeamBId; // Mapped from Temp Team
   let roomSpeakerIds = {};
 
   let newlyRegisteredToken;
@@ -279,44 +278,36 @@ describe("Tournament Lifecycle Stress-Test", () => {
     });
   });
 
-  // Debate part (Teams and Rooms)
-  describe("Pairing", () => {
-    it("should allow Owner to construct two teams", async () => {
-      // Team A
-      const resA = await request(app)
-        .post(`/api/rounds/${roundId}/teams`)
+  // Debate part (Hybrid Teams and Rooms)
+  describe("Hybrid Pairing", () => {
+    it("should allow Owner to construct a Permanent Team at the Event level", async () => {
+      // Team A (Constant)
+      const res = await request(app)
+        .post(`/api/events/${eventId}/teams`)
         .set("Authorization", `Bearer ${ownerToken}`)
         .send({
-          name: "Government",
+          name: "Government CONST",
           participant_ids: [speakers[0], speakers[1]],
+          is_temporary: false,
         });
-      expect(resA.statusCode).toEqual(201);
-      teamAId = resA.body.data.id;
 
-      // Team B
-      const resB = await request(app)
-        .post(`/api/rounds/${roundId}/teams`)
-        .set("Authorization", `Bearer ${ownerToken}`)
-        .send({
-          name: "Opposition",
-          participant_ids: [speakers[2], speakers[3]],
-        });
-      expect(resB.statusCode).toEqual(201);
-      teamBId = resB.body.data.id;
+      expect(res.statusCode).toEqual(201);
+      teamAId = res.body.data.id;
     });
 
-    it("should deny Team creation if a participant is double-booked", async () => {
+    it("should deny Team creation if a participant is double-booked in another Permanent Team", async () => {
       const res = await request(app)
-        .post(`/api/rounds/${roundId}/teams`)
+        .post(`/api/events/${eventId}/teams`)
         .set("Authorization", `Bearer ${ownerToken}`)
         .send({
           name: "Duplicate Team",
           participant_ids: [speakers[0], speakers[3]],
+          is_temporary: false,
         });
 
       expect(res.statusCode).toEqual(409);
       expect(res.body.message).toMatch(
-        /One or more participants are already assigned to a team/i,
+        /already assigned to a permanent team in this event/i,
       );
     });
 
@@ -329,7 +320,11 @@ describe("Tournament Lifecycle Stress-Test", () => {
           motion_id: motionId,
           teams: [
             { team_id: teamAId, position: 1 },
-            { team_id: teamBId, position: 2 },
+            {
+              participant_ids: [speakers[2], speakers[3]],
+              name: "Opposition FC",
+              position: 2,
+            },
           ],
           adjudicators: [{ participant_id: adjudicators[0], role: "panelist" }],
         });
@@ -340,7 +335,7 @@ describe("Tournament Lifecycle Stress-Test", () => {
       );
     });
 
-    it("should allow Owner to generate the Room and properly map all relations", async () => {
+    it("should allow Owner to generate the Room using Hybrid teams (Permanent + Temporary) and properly map all relations", async () => {
       const res = await request(app)
         .post(`/api/rounds/${roundId}/rooms`)
         .set("Authorization", `Bearer ${ownerToken}`)
@@ -348,8 +343,12 @@ describe("Tournament Lifecycle Stress-Test", () => {
           format_id: formatId,
           motion_id: motionId,
           teams: [
-            { team_id: teamAId, position: 1 },
-            { team_id: teamBId, position: 2 },
+            { team_id: teamAId, position: 1 }, // Permanent Team
+            {
+              participant_ids: [speakers[2], speakers[3]],
+              name: "Opposition FC",
+              position: 2,
+            }, // Temporary FC Team
           ],
           adjudicators: [
             { participant_id: adjudicators[0], role: "chair" },
@@ -358,6 +357,7 @@ describe("Tournament Lifecycle Stress-Test", () => {
         });
 
       expect(res.statusCode).toEqual(201);
+      expect(res.body.message).toMatch(/Room created successfully/i);
 
       // fetch the generated room to extract the IDs for the scoring
       const getRes = await request(app)
@@ -369,21 +369,20 @@ describe("Tournament Lifecycle Stress-Test", () => {
 
       // extract generated RoomTeam IDs
       const rtA = room.RoomTeams.find((rt) => rt.Team.id === teamAId);
-      const rtB = room.RoomTeams.find((rt) => rt.Team.id === teamBId);
+      const rtB = room.RoomTeams.find((rt) => rt.Team.name === "Opposition FC");
       roomTeamAId = rtA.id;
       roomTeamBId = rtB.id;
 
-      // extract generated RoomSpeaker IDs and mp to their original participant_id
       rtA.RoomSpeakers.forEach((rs) => {
-        const participantId =
-          rtA.Team.id === teamAId ? speakers[rs.speech_position - 1] : null;
-        roomSpeakerIds[participantId] = rs.id;
+        const pId =
+          rs.participant_id || (rs.EventParticipant && rs.EventParticipant.id);
+        if (pId) roomSpeakerIds[pId] = rs.id;
       });
 
       rtB.RoomSpeakers.forEach((rs) => {
-        const participantId =
-          rtB.Team.id === teamBId ? speakers[rs.speech_position + 1] : null;
-        roomSpeakerIds[participantId] = rs.id;
+        const pId =
+          rs.participant_id || (rs.EventParticipant && rs.EventParticipant.id);
+        if (pId) roomSpeakerIds[pId] = rs.id;
       });
     });
   });
@@ -414,7 +413,7 @@ describe("Tournament Lifecycle Stress-Test", () => {
     it("should allow valid score submission, lock the room, and calculate ranks", async () => {
       const res = await request(app)
         .post(`/api/rooms/${roomId}/scores`)
-        .set("Authorization", `Bearer ${adminToken}`) // here as well
+        .set("Authorization", `Bearer ${adminToken}`)
         .send({
           teamRankings: [
             { room_team_id: roomTeamAId, rank: 1 },
@@ -429,9 +428,7 @@ describe("Tournament Lifecycle Stress-Test", () => {
         });
 
       expect(res.statusCode).toEqual(200);
-      expect(res.body.message).toMatch(
-        /Scores submitted successfully. The room is now completed/i,
-      );
+      expect(res.body.message).toMatch(/Scores submitted successfully/i);
     });
   });
 

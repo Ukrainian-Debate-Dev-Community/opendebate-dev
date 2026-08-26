@@ -1,34 +1,41 @@
-const js = require('@eslint/js');
-const globals = require('globals');
-const n = require('eslint-plugin-n').default;
-const security = require('eslint-plugin-security');
-const promise = require('eslint-plugin-promise');
+const js = require("@eslint/js");
+const globals = require("globals");
+const n = require("eslint-plugin-n");
+const security = require("eslint-plugin-security");
+const promise = require("eslint-plugin-promise");
 
 module.exports = [
   js.configs.recommended,
-  n.configs['flat/recommended-script'],
-  security.configs.recommended,
-  promise.configs['flat/recommended'],
+  n.configs["flat/recommended-script"],
+  promise.configs["flat/recommended"],
+
+  {
+    plugins: {
+      security: security,
+    },
+    rules: security.configs.recommended.rules,
+  },
+
   {
     languageOptions: {
       ecmaVersion: 2024,
-      sourceType: 'commonjs',
+      sourceType: "commonjs",
       globals: { ...globals.node },
     },
     rules: {
-      'no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
-      'n/no-unpublished-require': 'off',
-      'n/no-unpublished-import': 'off',
+      "no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
+      "n/no-unpublished-require": "off",
+      "n/no-unpublished-import": "off",
     },
   },
   {
-    files: ['src/migrations/**/*.js', 'src/seeders/**/*.js'],
+    files: ["src/migrations/**/*.js", "src/seeders/**/*.js"],
     rules: {
-      'no-unused-vars': 'off',
+      "no-unused-vars": "off",
     },
   },
   {
-    files: ['tests/**/*.js'],
+    files: ["tests/**/*.js"],
     languageOptions: {
       globals: { ...globals.node, ...globals.jest },
     },

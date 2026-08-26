@@ -32,7 +32,7 @@ const getRoundById = async (req, res, next) => {
 const createRound = async (req, res, next) => {
   try {
     const { eventId } = req.params;
-    const { name, sequence } = req.body;
+    const { name, sequence, is_hidden } = req.body;
 
     if (!name || sequence === undefined) {
       throw new AppError("Please provide a name and a sequence number.", 400);
@@ -64,6 +64,7 @@ const createRound = async (req, res, next) => {
       name,
       sequence,
       status: "draft",
+      is_hidden: is_hidden !== undefined ? is_hidden : false,
     });
 
     res.status(201).json({ status: "success", data: newRound });
@@ -75,7 +76,7 @@ const createRound = async (req, res, next) => {
 const updateRound = async (req, res, next) => {
   try {
     const { roundId } = req.params;
-    const { name, sequence, status } = req.body;
+    const { name, sequence, status, is_hidden } = req.body;
 
     const round = await Round.findByPk(roundId);
     if (!round) throw new AppError("Round not found.", 404);
@@ -111,6 +112,7 @@ const updateRound = async (req, res, next) => {
 
     if (name) round.name = name;
     if (status) round.status = status;
+    if (is_hidden !== undefined) round.is_hidden = is_hidden;
 
     await round.save();
     res.status(200).json({ status: "success", data: round });
@@ -141,10 +143,27 @@ const deleteRound = async (req, res, next) => {
   }
 };
 
+const releaseAllRounds = async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+
+    await Round.update({ is_hidden: false }, { where: { event_id: eventId } });
+
+    res.status(200).json({
+      status: "success",
+      message:
+        "All rounds for this event have been released and are now visible.",
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getEventRounds,
   getRoundById,
   createRound,
   updateRound,
   deleteRound,
+  releaseAllRounds,
 };

@@ -22,6 +22,7 @@ describe("Event Participant API Endpoints", () => {
 
   let ownerId;
   let joiningUserId;
+  let randomUserId; // added to verify self-registration
 
   let targetOrgId;
   let targetEventId;
@@ -53,6 +54,7 @@ describe("Event Participant API Endpoints", () => {
       username: "random_user",
       password: "hashedpassword123",
     });
+    randomUserId = randomUser.id;
 
     randomToken = jwt.sign(
       { id: randomUser.id, isAdmin: false },
@@ -111,14 +113,13 @@ describe("Event Participant API Endpoints", () => {
     });
 
     const team = await Team.create({
-      round_id: round.id,
+      event_id: targetEventId,
       name: "Team A",
     });
 
     await TeamMember.create({
       team_id: team.id,
       participant_id: lockedSpeakerId,
-      speaker_order: 1,
     });
 
     const format = await Format.create({
@@ -186,6 +187,36 @@ describe("Event Participant API Endpoints", () => {
       linkedParticipantId = res.body.data.id;
     });
 
+    it("should allow a standard authenticated user to register themselves", async () => {
+      const res = await request(app)
+        .post(`/api/events/${targetEventId}/participants`)
+        .set("Authorization", `Bearer ${randomToken}`)
+        .send({
+          display_name: "Self Registered User",
+          role: "speaker",
+        });
+
+      expect(res.statusCode).toEqual(201);
+      expect(res.body.status).toBe("success");
+      expect(res.body.data.user_id).toBe(randomUserId); // verifies the controller forced their own ID
+    });
+
+    it("should return 403 if a standard user attempts to register someone else", async () => {
+      const res = await request(app)
+        .post(`/api/events/${targetEventId}/participants`)
+        .set("Authorization", `Bearer ${randomToken}`)
+        .send({
+          user_id: joiningUserId,
+          display_name: "Hacker",
+          role: "speaker",
+        });
+
+      expect(res.statusCode).toEqual(403);
+      expect(res.body.message).toMatch(
+        /You can only register yourself for this event/i,
+      );
+    });
+
     it("should return 400 if display name or role is missing", async () => {
       const res = await request(app)
         .post(`/api/events/${targetEventId}/participants`)
@@ -221,18 +252,6 @@ describe("Event Participant API Endpoints", () => {
         /User is already a participant in this event/i,
       );
     });
-
-    it("should return 403 if a random user tries to add a participant", async () => {
-      const res = await request(app)
-        .post(`/api/events/${targetEventId}/participants`)
-        .set("Authorization", `Bearer ${randomToken}`)
-        .send({ display_name: "Hacker", role: "speaker" });
-
-      expect(res.statusCode).toEqual(403);
-      expect(res.body.message).toMatch(
-        /You do not have Organiser or Owner privileges for this event/i,
-      );
-    });
   });
 
   // GET part
@@ -264,12 +283,11 @@ describe("Event Participant API Endpoints", () => {
       const res = await request(app)
         .put(`/api/events/${targetEventId}/participants/${guestParticipantId}`)
         .set("Authorization", `Bearer ${ownerToken}`)
-        .send({ role: "adjudicator", is_waitlist: false });
+        .send({ role: "adjudicator" });
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.status).toBe("success");
       expect(res.body.data.role).toBe("adjudicator");
-      expect(res.body.data.is_waitlist).toBe(false);
     });
 
     it("should return 404 for updating a non-existent participant", async () => {
@@ -286,12 +304,78 @@ describe("Event Participant API Endpoints", () => {
       const res = await request(app)
         .put(`/api/events/${targetEventId}/participants/${guestParticipantId}`)
         .set("Authorization", `Bearer ${randomToken}`)
-        .send({ is_waitlist: true });
+        .send({ display_name: "Penis" });
 
       expect(res.statusCode).toEqual(403);
       expect(res.body.message).toMatch(
         /You do not have Organiser or Owner privileges for this event/i,
       );
+    });
+  });
+
+  // PATCH part
+  describe("PATCH /api/events/:eventId/eliminations", () => {
+    it("should return 400 if status boolean is missing", async () => {
+      const res = await request(app)
+        .patch(`/api/events/${targetEventId}/eliminations`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ participant_ids: [lockedSpeakerId] });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.message).toMatch(/boolean 'status' field is required/i);
+    });
+
+    it("should return 400 if no teams or participants are provided", async () => {
+      const res = await request(app)
+        .patch(`/api/events/${targetEventId}/eliminations`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ status: true, team_ids: [], participant_ids: [] });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.message).toMatch(
+        /provide at least one team_id or participant_id/i,
+      );
+    });
+
+    it("should return 403 if a random user attempts bulk elimination", async () => {
+      const res = await request(app)
+        .patch(`/api/events/${targetEventId}/eliminations`)
+        .set("Authorization", `Bearer ${randomToken}`)
+        .send({ status: true, participant_ids: [lockedSpeakerId] });
+
+      expect(res.statusCode).toEqual(403);
+      expect(res.body.message).toMatch(
+        /You do not have Organiser or Owner privileges for this event/i,
+      );
+    });
+
+    it("should return 400 if attempting to eliminate an adjudicator", async () => {
+      const res = await request(app)
+        .patch(`/api/events/${targetEventId}/eliminations`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({
+          status: true,
+          participant_ids: [lockedAdjudicatorId],
+        });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.message).toMatch(/Adjudicators cannot be eliminated/i);
+    });
+
+    it("should successfully update the elimination status of provided entities", async () => {
+      const res = await request(app)
+        .patch(`/api/events/${targetEventId}/eliminations`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({
+          status: true,
+          participant_ids: [lockedSpeakerId],
+        });
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.message).toMatch(/successfully set to true/i);
+
+      const dbCheck = await EventParticipant.findByPk(lockedSpeakerId);
+      expect(dbCheck.is_eliminated).toBe(true);
     });
   });
 
@@ -304,7 +388,7 @@ describe("Event Participant API Endpoints", () => {
 
       expect(res.statusCode).toEqual(409);
       expect(res.body.message).toMatch(
-        /Cannot remove participant: still a member of a team. Remove them from the team first/i,
+        /Cannot remove participant: still a member of a team/i,
       );
     });
 
@@ -317,7 +401,7 @@ describe("Event Participant API Endpoints", () => {
 
       expect(res.statusCode).toEqual(409);
       expect(res.body.message).toMatch(
-        /Cannot remove participant: still assigned as a room adjudicator. Reassign the room first/i,
+        /Cannot remove participant: still assigned as a room adjudicator/i,
       );
     });
 

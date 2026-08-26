@@ -82,9 +82,9 @@ const resolveEventId = async (req) => {
     if (!room) throw new AppError("Room not found.", 404);
     eventId = room.Round.event_id;
   } else if (!eventId && req.params.teamId) {
-    const team = await Team.findByPk(req.params.teamId, { include: [Round] });
+    const team = await Team.findByPk(req.params.teamId);
     if (!team) throw new AppError("Team not found.", 404);
-    eventId = team.Round.event_id;
+    eventId = team.event_id;
   } else if (!eventId && req.params.roundId) {
     const round = await Round.findByPk(req.params.roundId);
     if (!round) throw new AppError("Round not found.", 404);
@@ -139,10 +139,7 @@ const restrictToOwnOrg = async (req, res, next) => {
 
     // formats are global resources — only admins may write them.
     if (req.params.formatId && !req.params.eventId) {
-      throw new AppError(
-        "Only an Admin can manage formats.",
-        403,
-      );
+      throw new AppError("Only an Admin can manage formats.", 403);
     }
 
     // org-scoped route with no event in scope: owner of the org passes.
