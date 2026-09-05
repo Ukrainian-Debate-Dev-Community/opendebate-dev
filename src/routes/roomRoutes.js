@@ -16,5 +16,6 @@ router.post("/:roomId/feedback", feedbackController.submitFeedback);
 
 router.delete("/:roomId", restrictToOwnOrg, roomController.deleteRoom);
 router.post("/:roomId/scores", restrictToChair, scoreController.submitScores);
+router.patch("/:roomId/reopen", restrictToOwnOrg, scoreController.reopenRoom);
 
 module.exports = router;

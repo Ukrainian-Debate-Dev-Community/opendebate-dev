@@ -480,6 +480,87 @@ describe("Scoring and Stats API Endpoints", () => {
     });
   });
 
+  // PATCH part (Ballot correction)
+  describe("PATCH /api/rooms/:roomId/reopen", () => {
+    it("should return 403 if a non-privileged user tries to reopen a room", async () => {
+      const res = await request(app)
+        .patch(`/api/rooms/${roomId}/reopen`)
+        .set("Authorization", `Bearer ${randomToken}`);
+
+      expect(res.statusCode).toEqual(403);
+    });
+
+    it("should return 404 for a non-existent room", async () => {
+      const res = await request(app)
+        .patch(`/api/rooms/99999/reopen`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.statusCode).toEqual(404);
+    });
+
+    it("should return 409 if the room is not completed", async () => {
+      const res = await request(app)
+        .patch(`/api/rooms/${noChairRoomId}/reopen`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.statusCode).toEqual(409);
+      expect(res.body.message).toMatch(/Only completed rooms can be reopened/i);
+    });
+
+    it("should reopen a completed room and wipe its ballot", async () => {
+      const res = await request(app)
+        .patch(`/api/rooms/${roomId}/reopen`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.message).toMatch(/Room reopened/i);
+
+      const dbRoom = await Room.findByPk(roomId);
+      expect(dbRoom.status).toBe("judging");
+
+      // ranks are cleared so standings cannot pick up the stale ballot
+      const rt = await RoomTeam.findByPk(roomTeam1Id);
+      expect(rt.rank).toBeNull();
+      const rs = await RoomSpeaker.findByPk(roomSpeaker1Id);
+      expect(rs.rank).toBeNull();
+
+      const scores = await Score.count({
+        include: [
+          {
+            model: RoomSpeaker,
+            where: { room_team_id: [roomTeam1Id, roomTeam2Id] },
+          },
+        ],
+      });
+      expect(scores).toEqual(0);
+    });
+
+    it("should allow the chair to resubmit a corrected ballot after reopening", async () => {
+      const res = await request(app)
+        .post(`/api/rooms/${roomId}/scores`)
+        .set("Authorization", `Bearer ${chairToken}`)
+        .send({
+          teamRankings: [
+            { room_team_id: roomTeam1Id, rank: 1 },
+            { room_team_id: roomTeam2Id, rank: 2 },
+          ],
+          speakerScores: [
+            { room_speaker_id: roomSpeaker1Id, score: 80 },
+            { room_speaker_id: roomSpeaker2Id, score: 80 },
+            { room_speaker_id: roomSpeaker3Id, score: 70 },
+            { room_speaker_id: roomSpeaker4Id, score: 70 },
+          ],
+        });
+
+      expect(res.statusCode).toEqual(200);
+
+      const dbRoom = await Room.findByPk(roomId);
+      expect(dbRoom.status).toBe("completed");
+      const rt = await RoomTeam.findByPk(roomTeam1Id);
+      expect(rt.rank).toEqual(1);
+    });
+  });
+
   // GET part (Stat check)
   describe("GET /api/users/:id/stats", () => {
     it("should return a null data object with a message for a user with no debates", async () => {

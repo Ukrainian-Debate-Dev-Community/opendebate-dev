@@ -197,4 +197,65 @@ const submitScores = async (req, res, next) => {
   }
 };
 
-module.exports = { submitScores };
+const reopenRoom = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const roomId = req.params.roomId;
+
+    const room = await Room.findByPk(roomId, {
+      lock: transaction.LOCK.UPDATE,
+      transaction,
+    });
+    if (!room) throw new AppError("Room not found.", 404);
+
+    if (room.status !== "completed") {
+      throw new AppError(
+        `Cannot reopen room. Only completed rooms can be reopened (current status: ${room.status}).`,
+        409,
+      );
+    }
+
+    // wipe the ballot: standings read ranks directly, so stale ranks/scores
+    // must not survive between reopening and resubmission
+    const roomAdjudicators = await RoomAdjudicator.findAll({
+      where: { room_id: roomId },
+      attributes: ["id"],
+      transaction,
+    });
+    await Score.destroy({
+      where: { room_adjudicator_id: roomAdjudicators.map((ra) => ra.id) },
+      transaction,
+    });
+
+    const roomTeams = await RoomTeam.findAll({
+      where: { room_id: roomId },
+      attributes: ["id"],
+      transaction,
+    });
+    const roomTeamIds = roomTeams.map((rt) => rt.id);
+    await RoomTeam.update(
+      { rank: null },
+      { where: { id: roomTeamIds }, transaction },
+    );
+    await RoomSpeaker.update(
+      { rank: null },
+      { where: { room_team_id: roomTeamIds }, transaction },
+    );
+
+    room.status = "judging";
+    await room.save({ transaction });
+
+    await transaction.commit();
+
+    res.status(200).json({
+      status: "success",
+      message: "Room reopened. Previous ballot cleared, awaiting new scores.",
+    });
+  } catch (error) {
+    await transaction.rollback();
+    next(error);
+  }
+};
+
+module.exports = { submitScores, reopenRoom };
