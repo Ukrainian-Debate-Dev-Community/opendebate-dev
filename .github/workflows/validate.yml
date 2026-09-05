@@ -63,6 +63,7 @@ jobs:
           DB_PASSWORD: postgres
           DB_TEST: opendebate_test
           JWT_SECRET: ci-only-dummy-secret-not-used-in-production
+          JWT_EXPIRES_IN: 1d
 
       - name: npm audit
         run: npm audit --audit-level=high --omit=dev
