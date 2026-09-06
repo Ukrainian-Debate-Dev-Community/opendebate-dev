@@ -14,7 +14,11 @@ module.exports = (sequelize) => {
     },
     {
       tableName: "feedbacks",
-      timestamps: false,
+      paranoid: true,
+      deletedAt: "archived_at",
+      timestamps: true,
+      createdAt: false,
+      updatedAt: false,
       validate: {
         exclusiveIssuer() {
           if (

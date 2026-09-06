@@ -1,6 +1,7 @@
 const { Motion, Event } = require("../models");
 const AppError = require("../utils/AppError");
 const { hasEventPrivilege } = require("../middleware/authMiddleware");
+const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 
 const createMotion = async (req, res, next) => {
   try {
@@ -13,7 +14,7 @@ const createMotion = async (req, res, next) => {
     // verify the event exists (and isn't soft-deleted) before insert,
     // so we return a clean 404 instead of a DB FK violation.
     const event = await Event.findByPk(eventId);
-    if (!event || event.is_deleted) {
+    if (!event) {
       throw new AppError("Event not found.", 404);
     }
 
@@ -34,7 +35,7 @@ const getMotions = async (req, res, next) => {
   try {
     const eventId = req.params.eventId;
     const motions = await Motion.findAll({
-      where: { event_id: eventId, is_deleted: false },
+      where: { event_id: eventId },
     });
 
     if (!motions || motions.length === 0) {
@@ -73,7 +74,7 @@ const getMotionById = async (req, res, next) => {
     const { eventId, motionId } = req.params;
 
     const motion = await Motion.findOne({
-      where: { id: motionId, event_id: req.params.eventId, is_deleted: false },
+      where: { id: motionId, event_id: req.params.eventId },
     });
     if (!motion) throw new AppError("Motion not found in this event.", 404);
 
@@ -106,7 +107,7 @@ const updateMotion = async (req, res, next) => {
     const { motion_text, infoslide, is_released } = req.body;
 
     const motion = await Motion.findOne({
-      where: { id: motionId, event_id: req.params.eventId, is_deleted: false },
+      where: { id: motionId, event_id: req.params.eventId },
     });
     if (!motion) throw new AppError("Motion not found in this event.", 404);
 
@@ -127,19 +128,31 @@ const deleteMotion = async (req, res, next) => {
     const { motionId } = req.params;
 
     const motion = await Motion.findOne({
-      where: { id: motionId, event_id: req.params.eventId, is_deleted: false },
+      where: { id: motionId, event_id: req.params.eventId },
+      paranoid: false,
     });
     if (!motion) throw new AppError("Motion not found in this event.", 404);
 
-    // soft-delete so rooms that used this motion preserve their
+    // archive by default so rooms that used this motion preserve their
     // historical reference (the FK is SET NULL on hard delete, which would
     // erase which motion was actually debated).
-    motion.is_deleted = true;
-    await motion.save();
+    const outcome = await destroyOrArchive(motion, req);
 
     res
       .status(200)
-      .json({ status: "success", message: "Motion deleted successfully." });
+      .json({ status: "success", message: `Motion ${outcome} successfully.` });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const restoreMotion = async (req, res, next) => {
+  try {
+    const motion = await restoreRecord(Motion, {
+      id: req.params.motionId,
+      event_id: req.params.eventId,
+    });
+    res.status(200).json({ status: "success", data: motion });
   } catch (error) {
     next(error);
   }
@@ -151,4 +164,5 @@ module.exports = {
   getMotionById,
   updateMotion,
   deleteMotion,
+  restoreMotion,
 };

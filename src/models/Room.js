@@ -16,7 +16,14 @@ module.exports = (sequelize) => {
         },
       },
     },
-    { tableName: "rooms" },
+    {
+      tableName: "rooms",
+      paranoid: true,
+      deletedAt: "archived_at",
+      timestamps: true,
+      createdAt: false,
+      updatedAt: false,
+    },
   );
 
   Room.associate = (models) => {

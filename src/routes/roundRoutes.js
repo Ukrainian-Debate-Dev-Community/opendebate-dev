@@ -13,6 +13,11 @@ router.use(verifyToken);
 router.get("/:roundId", roundController.getRoundById);
 router.put("/:roundId", restrictToOwnOrg, roundController.updateRound);
 router.delete("/:roundId", restrictToOwnOrg, roundController.deleteRound);
+router.patch(
+  "/:roundId/restore",
+  restrictToOwnOrg,
+  roundController.restoreRound,
+);
 
 // rooms
 router.get("/:roundId/rooms", roomController.getRoundRooms);

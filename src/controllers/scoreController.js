@@ -53,7 +53,7 @@ const submitScores = async (req, res, next) => {
     // `of: Room` so the joined Format isn't locked (Postgres rejects FOR
     // UPDATE on the nullable side of an outer join).
     const room = await Room.findByPk(roomId, {
-      include: [Format],
+      include: [{ model: Format, paranoid: false }],
       lock: { level: transaction.LOCK.UPDATE, of: Room },
       transaction,
     });

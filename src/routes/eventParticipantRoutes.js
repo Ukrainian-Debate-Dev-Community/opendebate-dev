@@ -16,5 +16,10 @@ router.delete(
   restrictToOwnOrg,
   participantController.removeParticipant,
 );
+router.patch(
+  "/:participantId/restore",
+  restrictToOwnOrg,
+  participantController.restoreParticipant,
+);
 
 module.exports = router;

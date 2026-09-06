@@ -13,5 +13,10 @@ router.delete(
   restrictToAdmin,
   feedbackController.deleteFeedback,
 );
+router.patch(
+  "/:feedbackId/restore",
+  restrictToAdmin,
+  feedbackController.restoreFeedback,
+);
 
 module.exports = router;

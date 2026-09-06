@@ -19,11 +19,17 @@ module.exports = (sequelize) => {
     },
     {
       tableName: "rounds",
+      paranoid: true,
+      deletedAt: "archived_at",
+      timestamps: true,
+      createdAt: false,
+      updatedAt: false,
       indexes: [
         {
           unique: true,
           fields: ["event_id", "sequence"],
           name: "unique_sequence_per_event",
+          where: { archived_at: null },
         },
       ],
     },

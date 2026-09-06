@@ -1,5 +1,6 @@
 const { Conflict, EventParticipant, Team } = require("../models");
 const AppError = require("../utils/AppError");
+const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 
 const createConflict = async (req, res, next) => {
   try {
@@ -122,18 +123,31 @@ const deleteConflict = async (req, res, next) => {
 
     const conflict = await Conflict.findOne({
       where: { id: conflictId, event_id: eventId },
+      paranoid: false,
     });
 
     if (!conflict) {
       throw new AppError("Conflict record not found in this event.", 404);
     }
 
-    await conflict.destroy();
+    const outcome = await destroyOrArchive(conflict, req);
 
     res.status(200).json({
       status: "success",
-      message: "Conflict record deleted successfully.",
+      message: `Conflict record ${outcome} successfully.`,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const restoreConflict = async (req, res, next) => {
+  try {
+    const conflict = await restoreRecord(Conflict, {
+      id: req.params.conflictId,
+      event_id: req.params.eventId,
+    });
+    res.status(200).json({ status: "success", data: conflict });
   } catch (error) {
     next(error);
   }
@@ -143,4 +157,5 @@ module.exports = {
   createConflict,
   getEventConflicts,
   deleteConflict,
+  restoreConflict,
 };

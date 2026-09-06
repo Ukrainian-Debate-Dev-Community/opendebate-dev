@@ -13,5 +13,6 @@ router.route("/").get(conflictController.getEventConflicts);
 router.route("/").post(conflictController.createConflict);
 
 router.route("/:conflictId").delete(conflictController.deleteConflict);
+router.patch("/:conflictId/restore", conflictController.restoreConflict);
 
 module.exports = router;

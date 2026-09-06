@@ -12,6 +12,7 @@ const {
   sequelize,
 } = require("../models");
 const AppError = require("../utils/AppError");
+const { destroyOrArchive } = require("../utils/lifecycle");
 
 const createRoom = async (req, res, next) => {
   const transaction = await sequelize.transaction();
@@ -80,7 +81,7 @@ const createRoom = async (req, res, next) => {
     // motion validation
     if (motion_id) {
       const motion = await Motion.findOne({
-        where: { id: motion_id, event_id: eventId, is_deleted: false },
+        where: { id: motion_id, event_id: eventId },
         transaction,
       });
       if (!motion)
@@ -372,13 +373,14 @@ const getRoundRooms = async (req, res, next) => {
     const rooms = await Room.findAll({
       where: { round_id: roundId },
       include: [
-        { model: Format, attributes: ["name", "code"] },
+        { model: Format, attributes: ["name", "code"], paranoid: false },
         {
           model: RoomAdjudicator,
           attributes: ["id", "role"],
           include: [
             {
               model: EventParticipant,
+              paranoid: false,
               attributes: ["id", "display_name", "user_id"],
             },
           ],
@@ -387,12 +389,16 @@ const getRoundRooms = async (req, res, next) => {
           model: RoomTeam,
           attributes: ["id", "position", "rank"],
           include: [
-            { model: Team, attributes: ["id", "name", "is_temporary"] },
+            { model: Team, attributes: ["id", "name", "is_temporary"], paranoid: false },
             {
               model: RoomSpeaker,
               attributes: ["id", "rank"],
               include: [
-                { model: EventParticipant, attributes: ["id", "display_name"] },
+                {
+                  model: EventParticipant,
+                  attributes: ["id", "display_name"],
+                  paranoid: false,
+                },
               ],
             },
           ],
@@ -411,6 +417,7 @@ const deleteRoom = async (req, res, next) => {
   try {
     const room = await Room.findByPk(req.params.roomId, {
       lock: transaction.LOCK.UPDATE,
+      paranoid: false,
       transaction,
     });
 
@@ -434,16 +441,16 @@ const deleteRoom = async (req, res, next) => {
       .map((rt) => rt.Team)
       .filter((team) => team && team.is_temporary);
 
-    await room.destroy({ transaction });
+    const outcome = await destroyOrArchive(room, req, { transaction });
 
     for (const tempTeam of temporaryTeamsToPurge) {
-      await tempTeam.destroy({ transaction });
+      await tempTeam.destroy({ force: outcome === "deleted", transaction });
     }
 
     await transaction.commit();
     res.status(200).json({
       status: "success",
-      message: "Room and associated temporary teams deleted successfully.",
+      message: `Room and associated temporary teams ${outcome} successfully.`,
     });
   } catch (error) {
     await transaction.rollback();
@@ -451,4 +458,36 @@ const deleteRoom = async (req, res, next) => {
   }
 };
 
-module.exports = { createRoom, getRoundRooms, deleteRoom };
+const restoreRoom = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+  try {
+    const room = await Room.findByPk(req.params.roomId, {
+      paranoid: false,
+      transaction,
+    });
+    if (!room) throw new AppError("Room not found.", 404);
+    if (!room.archived_at) throw new AppError("Room is not archived.", 409);
+
+    await room.restore({ transaction });
+
+    // bring back the temporary teams that were archived with the room
+    const roomTeams = await RoomTeam.findAll({
+      where: { room_id: room.id },
+      include: [{ model: Team, paranoid: false }],
+      transaction,
+    });
+    for (const rt of roomTeams) {
+      if (rt.Team && rt.Team.is_temporary && rt.Team.archived_at) {
+        await rt.Team.restore({ transaction });
+      }
+    }
+
+    await transaction.commit();
+    res.status(200).json({ status: "success", data: room });
+  } catch (error) {
+    await transaction.rollback();
+    next(error);
+  }
+};
+
+module.exports = { createRoom, getRoundRooms, deleteRoom, restoreRoom };

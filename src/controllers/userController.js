@@ -206,7 +206,6 @@ const getUserHistory = async (req, res, next) => {
 
     // Events that are either marked completed or their end date has passed
     const whereEvent = {
-      is_deleted: false,
       [Op.or]: [{ status: "completed" }, { end_date: { [Op.lt]: new Date() } }],
     };
 
@@ -253,7 +252,6 @@ const getUserSchedule = async (req, res, next) => {
 
     // active or upcoming Events whose end date has NOT passed
     const whereEvent = {
-      is_deleted: false,
       status: { [Op.in]: ["scheduled", "in_progress"] },
       [Op.or]: [
         { end_date: { [Op.gte]: new Date() } },

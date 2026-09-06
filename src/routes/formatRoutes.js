@@ -14,5 +14,10 @@ router.get("/:formatId", formatController.getFormat);
 router.post("/", restrictToAdmin, formatController.createFormat);
 router.put("/:formatId", restrictToAdmin, formatController.updateFormat);
 router.delete("/:formatId", restrictToAdmin, formatController.deleteFormat);
+router.patch(
+  "/:formatId/restore",
+  restrictToAdmin,
+  formatController.restoreFormat,
+);
 
 module.exports = router;

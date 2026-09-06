@@ -1,6 +1,7 @@
 const { Format } = require("../models");
 const { Op } = require("sequelize");
 const AppError = require("../utils/AppError");
+const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 
 const isPositiveInt = (v) => Number.isInteger(v) && v > 0;
 
@@ -134,13 +135,15 @@ const updateFormat = async (req, res, next) => {
 
 const deleteFormat = async (req, res, next) => {
   try {
-    const format = await Format.findByPk(req.params.formatId);
+    const format = await Format.findByPk(req.params.formatId, {
+      paranoid: false,
+    });
     if (!format) throw new AppError("Format not found.", 404);
 
-    await format.destroy();
+    const outcome = await destroyOrArchive(format, req);
     res
       .status(200)
-      .json({ status: "success", message: "Format deleted successfully." });
+      .json({ status: "success", message: `Format ${outcome} successfully.` });
   } catch (error) {
     const isForeignKeyError =
       error.name === "SequelizeForeignKeyConstraintError" ||
@@ -159,10 +162,20 @@ const deleteFormat = async (req, res, next) => {
   }
 };
 
+const restoreFormat = async (req, res, next) => {
+  try {
+    const format = await restoreRecord(Format, { id: req.params.formatId });
+    res.status(200).json({ status: "success", data: format });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   createFormat,
   getAllFormats,
   getFormat,
   updateFormat,
   deleteFormat,
+  restoreFormat,
 };

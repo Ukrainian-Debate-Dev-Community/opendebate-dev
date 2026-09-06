@@ -21,7 +21,7 @@ const getUserStats = async (req, res, next) => {
       include: [
         {
           model: Event,
-          where: { is_deleted: false },
+          required: true,
         },
       ],
     });

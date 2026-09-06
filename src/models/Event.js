@@ -17,9 +17,15 @@ module.exports = (sequelize) => {
         },
       },
       is_ranked: { type: DataTypes.BOOLEAN, defaultValue: false },
-      is_deleted: { type: DataTypes.BOOLEAN, defaultValue: false },
     },
-    { tableName: "events" },
+    {
+      tableName: "events",
+      paranoid: true,
+      deletedAt: "archived_at",
+      timestamps: true,
+      createdAt: false,
+      updatedAt: false,
+    },
   );
 
   Event.associate = (models) => {

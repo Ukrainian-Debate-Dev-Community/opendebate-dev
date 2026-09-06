@@ -17,7 +17,14 @@ module.exports = (sequelize) => {
       claim_token_hash: { type: DataTypes.STRING(255), allowNull: true },
       claim_token_used_at: { type: DataTypes.DATE, allowNull: true },
     },
-    { tableName: "event_participants" },
+    {
+      tableName: "event_participants",
+      paranoid: true,
+      deletedAt: "archived_at",
+      timestamps: true,
+      createdAt: false,
+      updatedAt: false,
+    },
   );
 
   EventParticipant.associate = (models) => {

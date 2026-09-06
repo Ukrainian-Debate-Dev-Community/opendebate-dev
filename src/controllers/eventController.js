@@ -1,5 +1,6 @@
-const { Event, sequelize } = require("../models");
+const { Event } = require("../models");
 const AppError = require("../utils/AppError");
+const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 
 const checkEventAccess = async (req, res, next) => {
   try {
@@ -42,8 +43,10 @@ const createEvent = async (req, res, next) => {
 
 const getOrganisationEvents = async (req, res, next) => {
   try {
+    const includeArchived = req.query.include_archived === "true";
     const events = await Event.findAll({
-      where: { organisation_id: req.params.organisationId, is_deleted: false },
+      where: { organisation_id: req.params.organisationId },
+      paranoid: !includeArchived,
     });
 
     res.status(200).json({ status: "success", data: events });
@@ -57,7 +60,7 @@ const updateEvent = async (req, res, next) => {
     const { name, start_date, end_date, status, is_ranked } = req.body;
     const event = await Event.findByPk(req.params.eventId);
 
-    if (!event || event.is_deleted) throw new AppError("Event not found.", 404);
+    if (!event) throw new AppError("Event not found.", 404);
 
     if (status && !["scheduled", "in_progress", "completed"].includes(status)) {
       throw new AppError("Invalid status state.", 400);
@@ -78,38 +81,26 @@ const updateEvent = async (req, res, next) => {
 
 const deleteEvent = async (req, res, next) => {
   try {
-    const event = await Event.findByPk(req.params.eventId);
+    const event = await Event.findByPk(req.params.eventId, {
+      paranoid: false,
+    });
     if (!event) throw new AppError("Event not found.", 404);
 
-    await event.destroy();
-    res.status(204).json({ status: "success", data: null });
+    const outcome = await destroyOrArchive(event, req);
+    res.status(200).json({
+      status: "success",
+      message: `Event ${outcome} successfully.`,
+    });
   } catch (error) {
-    // wrap the soft-delete fallback in a transaction with a row lock
-    // so concurrent deactivations can't race on the `is_deleted` flip.
+    next(error);
+  }
+};
 
-    const isForeignKeyError =
-      error.name === "SequelizeForeignKeyConstraintError" ||
-      error.message.includes("rounds_event_id_fkey");
-    // added RESTRICT on round-event and implemented as in previous cases
-
-    if (isForeignKeyError) {
-      try {
-        await sequelize.transaction(async (t) => {
-          const eventToSoftDelete = await Event.findByPk(req.params.eventId, {
-            lock: t.LOCK.UPDATE,
-            transaction: t,
-          });
-          eventToSoftDelete.is_deleted = true;
-          await eventToSoftDelete.save({ transaction: t });
-        });
-        return res.status(200).json({
-          status: "success",
-          message: "Event deactivated due to historical records.",
-        });
-      } catch (softDeleteError) {
-        return next(softDeleteError);
-      }
-    }
+const restoreEvent = async (req, res, next) => {
+  try {
+    const event = await restoreRecord(Event, { id: req.params.eventId });
+    res.status(200).json({ status: "success", data: event });
+  } catch (error) {
     next(error);
   }
 };
@@ -120,4 +111,5 @@ module.exports = {
   getOrganisationEvents,
   updateEvent,
   deleteEvent,
+  restoreEvent,
 };

@@ -1,5 +1,6 @@
 const { Round, Event } = require("../models");
 const AppError = require("../utils/AppError");
+const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 
 const getEventRounds = async (req, res, next) => {
   try {
@@ -41,7 +42,7 @@ const createRound = async (req, res, next) => {
     const event = await Event.findByPk(eventId);
     if (!event) throw new AppError("Event not found.", 404);
 
-    if (event.status === "completed" || event.is_deleted) {
+    if (event.status === "completed") {
       throw new AppError(
         "Cannot add rounds to an event that is completed or deleted.",
         403,
@@ -124,7 +125,7 @@ const updateRound = async (req, res, next) => {
 const deleteRound = async (req, res, next) => {
   try {
     const { roundId } = req.params;
-    const round = await Round.findByPk(roundId);
+    const round = await Round.findByPk(roundId, { paranoid: false });
 
     if (!round) throw new AppError("Round not found.", 404);
 
@@ -132,11 +133,11 @@ const deleteRound = async (req, res, next) => {
       throw new AppError(`Cannot delete a round that is ${round.status}.`, 403);
     }
 
-    await round.destroy();
+    const outcome = await destroyOrArchive(round, req);
 
     res.status(200).json({
       status: "success",
-      message: "Round deleted successfully.",
+      message: `Round ${outcome} successfully.`,
     });
   } catch (error) {
     next(error);
@@ -159,11 +160,21 @@ const releaseAllRounds = async (req, res, next) => {
   }
 };
 
+const restoreRound = async (req, res, next) => {
+  try {
+    const round = await restoreRecord(Round, { id: req.params.roundId });
+    res.status(200).json({ status: "success", data: round });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   getEventRounds,
   getRoundById,
   createRound,
   updateRound,
   deleteRound,
+  restoreRound,
   releaseAllRounds,
 };

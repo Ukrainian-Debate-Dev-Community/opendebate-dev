@@ -11,7 +11,14 @@ module.exports = (sequelize) => {
       target_team_id: { type: DataTypes.INTEGER, allowNull: true },
       comment: { type: DataTypes.TEXT, allowNull: true },
     },
-    { tableName: "conflicts", timestamps: false },
+    {
+      tableName: "conflicts",
+      paranoid: true,
+      deletedAt: "archived_at",
+      timestamps: true,
+      createdAt: false,
+      updatedAt: false,
+    },
   );
 
   Conflict.associate = (models) => {

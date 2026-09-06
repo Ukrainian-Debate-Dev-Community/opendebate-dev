@@ -13,7 +13,14 @@ module.exports = (sequelize) => {
       score_min: { type: DataTypes.SMALLINT, allowNull: false },
       score_max: { type: DataTypes.SMALLINT, allowNull: false },
     },
-    { tableName: "formats" },
+    {
+      tableName: "formats",
+      paranoid: true,
+      deletedAt: "archived_at",
+      timestamps: true,
+      createdAt: false,
+      updatedAt: false,
+    },
   );
 
   Format.associate = (models) => {

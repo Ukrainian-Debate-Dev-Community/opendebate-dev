@@ -11,6 +11,7 @@ const {
 } = require("../models");
 const { Op } = require("sequelize");
 const AppError = require("../utils/AppError");
+const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 
 const createTeam = async (req, res, next) => {
   const transaction = await sequelize.transaction();
@@ -215,6 +216,7 @@ const updateTeam = async (req, res, next) => {
     const team = await Team.findOne({
       where: { id: teamId, event_id: eventId },
       include: [TeamMember],
+      paranoid: false,
       transaction,
     });
     if (!team) throw new AppError("Team not found in this event.", 404);
@@ -347,15 +349,27 @@ const deleteTeam = async (req, res, next) => {
     }
 
     // disband the team
-    await team.destroy({ transaction });
+    const outcome = await destroyOrArchive(team, req, { transaction });
 
     await transaction.commit();
     res.status(200).json({
       status: "success",
-      message: "Team dissolved successfully.",
+      message: `Team ${outcome} successfully.`,
     });
   } catch (error) {
     await transaction.rollback();
+    next(error);
+  }
+};
+
+const restoreTeam = async (req, res, next) => {
+  try {
+    const team = await restoreRecord(Team, {
+      id: req.params.teamId,
+      event_id: req.params.eventId,
+    });
+    res.status(200).json({ status: "success", data: team });
+  } catch (error) {
     next(error);
   }
 };
@@ -366,4 +380,5 @@ module.exports = {
   getEventTeams,
   updateTeam,
   deleteTeam,
+  restoreTeam,
 };

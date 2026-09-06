@@ -23,6 +23,11 @@ router.delete(
   restrictToAdmin,
   orgController.deleteOrganisation,
 );
+router.patch(
+  "/:organisationId/restore",
+  restrictToAdmin,
+  orgController.restoreOrganisation,
+);
 
 router.post(
   "/:organisationId/owners",
