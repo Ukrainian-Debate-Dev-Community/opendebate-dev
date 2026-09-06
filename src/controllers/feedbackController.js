@@ -11,6 +11,7 @@ const {
   sequelize,
 } = require("../models");
 const AppError = require("../utils/AppError");
+const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 const { hasEventPrivilege } = require("../middleware/authMiddleware");
 
 const submitFeedback = async (req, res, next) => {
@@ -209,16 +210,29 @@ const getEventFeedback = async (req, res, next) => {
 const deleteFeedback = async (req, res, next) => {
   try {
     const feedbackId = req.params.feedbackId;
-    const feedback = await Feedback.findByPk(feedbackId);
+    const feedback = await Feedback.findByPk(feedbackId, {
+      paranoid: false,
+    });
 
     if (!feedback) throw new AppError("Feedback record not found.", 404);
 
-    await feedback.destroy();
+    const outcome = await destroyOrArchive(feedback, req);
 
     res.status(200).json({
       status: "success",
-      message: "Feedback record deleted successfully.",
+      message: `Feedback record ${outcome} successfully.`,
     });
+  } catch (error) {
+    next(error);
+  }
+};
+
+const restoreFeedback = async (req, res, next) => {
+  try {
+    const feedback = await restoreRecord(Feedback, {
+      id: req.params.feedbackId,
+    });
+    res.status(200).json({ status: "success", data: feedback });
   } catch (error) {
     next(error);
   }
@@ -228,4 +242,5 @@ module.exports = {
   submitFeedback,
   getEventFeedback,
   deleteFeedback,
+  restoreFeedback,
 };

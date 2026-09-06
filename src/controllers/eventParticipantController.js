@@ -8,6 +8,7 @@ const {
   sequelize,
 } = require("../models");
 const AppError = require("../utils/AppError");
+const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 const { hasEventPrivilege } = require("../middleware/authMiddleware");
 
 const addParticipant = async (req, res, next) => {
@@ -128,6 +129,7 @@ const updateParticipant = async (req, res, next) => {
 
     const participant = await EventParticipant.findOne({
       where: { id: participantId, event_id: req.params.eventId },
+      paranoid: false,
     });
     if (!participant)
       throw new AppError("Participant not found in this event.", 404);
@@ -233,11 +235,11 @@ const removeParticipant = async (req, res, next) => {
       );
     }
 
-    await participant.destroy();
+    const outcome = await destroyOrArchive(participant, req);
 
     res
       .status(200)
-      .json({ status: "success", message: "Participant removed." });
+      .json({ status: "success", message: `Participant ${outcome}.` });
   } catch (error) {
     next(error);
   }
@@ -294,11 +296,24 @@ const claimIdentity = async (req, res, next) => {
   }
 };
 
+const restoreParticipant = async (req, res, next) => {
+  try {
+    const participant = await restoreRecord(EventParticipant, {
+      id: req.params.participantId,
+      event_id: req.params.eventId,
+    });
+    res.status(200).json({ status: "success", data: participant });
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
   addParticipant,
   getEventParticipants,
   updateParticipant,
   updateEliminations,
   removeParticipant,
+  restoreParticipant,
   claimIdentity,
 };

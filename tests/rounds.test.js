@@ -343,7 +343,7 @@ describe("Round API Endpoints", () => {
         .set("Authorization", `Bearer ${ownerToken}`);
 
       expect(res.statusCode).toEqual(200);
-      expect(res.body.message).toMatch(/deleted successfully/i);
+      expect(res.body.message).toMatch(/archived successfully/i);
 
       // verify it is completely gone
       const check = await Round.findByPk(createdRoundId);

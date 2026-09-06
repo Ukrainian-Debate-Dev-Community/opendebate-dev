@@ -123,8 +123,8 @@ describe("Motion API Endpoints", () => {
       const deletedEvent = await Event.create({
         organisation_id: orgId,
         name: "Deleted Event",
-        is_deleted: true,
       });
+      await deletedEvent.destroy(); // archive it
 
       const res = await request(app)
         .post(`/api/events/${deletedEvent.id}/motions`)
@@ -314,20 +314,23 @@ describe("Motion API Endpoints", () => {
         .set("Authorization", `Bearer ${ownerToken}`);
 
       expect(res.statusCode).toEqual(200);
-      expect(res.body.message).toMatch(/Motion deleted successfully/i);
+      expect(res.body.message).toMatch(/Motion archived successfully/i);
 
-      // verify the state in the DB
-      const dbCheck = await Motion.findByPk(releasedMotionId);
-      expect(dbCheck.is_deleted).toBe(true);
+      // hidden from default queries, but preserved with an archival timestamp
+      expect(await Motion.findByPk(releasedMotionId)).toBeNull();
+      const dbCheck = await Motion.findByPk(releasedMotionId, {
+        paranoid: false,
+      });
+      expect(dbCheck.archived_at).not.toBeNull();
     });
 
-    it("should return 404 if attempting to delete an already deleted motion", async () => {
+    it("should return 409 if attempting to archive an already archived motion", async () => {
       const res = await request(app)
         .delete(`/api/events/${eventId}/motions/${releasedMotionId}`)
         .set("Authorization", `Bearer ${ownerToken}`);
 
-      expect(res.statusCode).toEqual(404);
-      expect(res.body.message).toMatch(/Motion not found/i);
+      expect(res.statusCode).toEqual(409);
+      expect(res.body.message).toMatch(/already archived/i);
     });
   });
 });

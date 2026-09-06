@@ -10,5 +10,10 @@ router.get("/:motionId", motionController.getMotionById);
 router.post("/", restrictToOwnOrg, motionController.createMotion);
 router.put("/:motionId", restrictToOwnOrg, motionController.updateMotion);
 router.delete("/:motionId", restrictToOwnOrg, motionController.deleteMotion);
+router.patch(
+  "/:motionId/restore",
+  restrictToOwnOrg,
+  motionController.restoreMotion,
+);
 
 module.exports = router;

@@ -433,7 +433,7 @@ describe("Team API Endpoints", () => {
         .set("Authorization", `Bearer ${ownerToken}`);
 
       expect(res.statusCode).toEqual(200);
-      expect(res.body.message).toMatch(/Team dissolved successfully/i);
+      expect(res.body.message).toMatch(/Team archived successfully/i);
 
       const dbCheck = await Team.findByPk(team1Id);
       expect(dbCheck).toBeNull();

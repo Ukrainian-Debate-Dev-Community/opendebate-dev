@@ -409,7 +409,7 @@ describe("Feedback API Endpoints", () => {
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(res.statusCode).toEqual(200);
-      expect(res.body.message).toMatch(/deleted successfully/i);
+      expect(res.body.message).toMatch(/archived successfully/i);
 
       const dbCheck = await Feedback.findByPk(individualFeedbackId);
       expect(dbCheck).toBeNull();

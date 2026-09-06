@@ -78,24 +78,28 @@ const resolveEventId = async (req) => {
   let eventId = req.params.eventId ? Number(req.params.eventId) : null;
 
   if (!eventId && req.params.roomId) {
-    const room = await Room.findByPk(req.params.roomId, { include: [Round] });
+    const room = await Room.findByPk(req.params.roomId, {
+      include: [{ model: Round, paranoid: false }],
+      paranoid: false,
+    });
     if (!room) throw new AppError("Room not found.", 404);
     eventId = room.Round.event_id;
   } else if (!eventId && req.params.teamId) {
-    const team = await Team.findByPk(req.params.teamId);
+    const team = await Team.findByPk(req.params.teamId, { paranoid: false });
     if (!team) throw new AppError("Team not found.", 404);
     eventId = team.event_id;
   } else if (!eventId && req.params.roundId) {
-    const round = await Round.findByPk(req.params.roundId);
+    const round = await Round.findByPk(req.params.roundId, { paranoid: false });
     if (!round) throw new AppError("Round not found.", 404);
     eventId = round.event_id;
   } else if (!eventId && req.params.motionId) {
-    const motion = await Motion.findByPk(req.params.motionId);
+    const motion = await Motion.findByPk(req.params.motionId, { paranoid: false });
     if (!motion) throw new AppError("Motion not found.", 404);
     eventId = motion.event_id;
   } else if (!eventId && req.params.participantId) {
     const participant = await EventParticipant.findByPk(
       req.params.participantId,
+      { paranoid: false },
     );
     if (!participant) throw new AppError("Participant not found.", 404);
     eventId = participant.event_id;
@@ -114,7 +118,7 @@ const hasEventPrivilege = async (userId, isAdmin, eventId) => {
   if (isAdmin) return true;
   if (!eventId) return false;
 
-  const event = await Event.findByPk(eventId);
+  const event = await Event.findByPk(eventId, { paranoid: false });
   if (!event) throw new AppError("Event not found.", 404);
 
   const isOwner = await Owner.findOne({

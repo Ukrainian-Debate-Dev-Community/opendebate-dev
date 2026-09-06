@@ -15,6 +15,7 @@ router.use(verifyToken);
 router.post("/:roomId/feedback", feedbackController.submitFeedback);
 
 router.delete("/:roomId", restrictToOwnOrg, roomController.deleteRoom);
+router.patch("/:roomId/restore", restrictToOwnOrg, roomController.restoreRoom);
 router.post("/:roomId/scores", restrictToChair, scoreController.submitScores);
 router.patch("/:roomId/reopen", restrictToOwnOrg, scoreController.reopenRoom);
 

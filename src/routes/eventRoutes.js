@@ -87,6 +87,11 @@ router.delete(
   restrictToOwnOrg,
   teamController.deleteTeam,
 );
+router.patch(
+  "/:eventId/teams/:teamId/restore",
+  restrictToOwnOrg,
+  teamController.restoreTeam,
+);
 
 // event CRUD
 router.get(
@@ -96,5 +101,10 @@ router.get(
 router.post("/:organisationId", restrictToOwnOrg, eventController.createEvent);
 router.put("/:eventId", restrictToOwnOrg, eventController.updateEvent);
 router.delete("/:eventId", restrictToOwnOrg, eventController.deleteEvent);
+router.patch(
+  "/:eventId/restore",
+  restrictToOwnOrg,
+  eventController.restoreEvent,
+);
 
 module.exports = router;

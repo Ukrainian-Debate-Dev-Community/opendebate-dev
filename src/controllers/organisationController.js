@@ -1,5 +1,6 @@
 const { Organisation, Owner, User, sequelize } = require("../models");
 const AppError = require("../utils/AppError");
+const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 
 const createOrganisation = async (req, res, next) => {
   try {
@@ -48,8 +49,10 @@ const createOrganisation = async (req, res, next) => {
 
 const getAllOrganisations = async (req, res, next) => {
   try {
+    const includeArchived = req.query.include_archived === "true";
     const organisations = await Organisation.findAll({
-      where: { status: "active", is_deleted: false },
+      where: includeArchived ? {} : { status: "active" },
+      paranoid: !includeArchived,
       include: [{ model: User, as: "Owners", attributes: ["id", "username"] }],
     });
     res.status(200).json({ status: "success", data: organisations });
@@ -69,11 +72,7 @@ const getOrganisation = async (req, res, next) => {
       },
     );
 
-    if (
-      !organisation ||
-      organisation.status !== "active" ||
-      organisation.is_deleted
-    ) {
+    if (!organisation || organisation.status !== "active") {
       throw new AppError("Organisation not found.", 404);
     }
     res.status(200).json({ status: "success", data: organisation });
@@ -87,8 +86,7 @@ const updateOrganisation = async (req, res, next) => {
     const { name, type, online, link, status } = req.body;
     const organisation = await Organisation.findByPk(req.params.organisationId);
 
-    if (!organisation || organisation.is_deleted)
-      throw new AppError("Organisation not found.", 404);
+    if (!organisation) throw new AppError("Organisation not found.", 404);
 
     if (type && !["academic", "personal"].includes(type)) {
       throw new AppError(
@@ -112,47 +110,30 @@ const updateOrganisation = async (req, res, next) => {
 
 const deleteOrganisation = async (req, res, next) => {
   try {
-    const organisation = await Organisation.findByPk(req.params.organisationId);
+    const organisation = await Organisation.findByPk(
+      req.params.organisationId,
+      { paranoid: false },
+    );
 
     if (!organisation) throw new AppError("Organisation not found.", 404);
 
-    // Try Hard Delete
-    await organisation.destroy();
-    res.status(204).json({ status: "success", data: null });
+    const outcome = await destroyOrArchive(organisation, req);
+    res.status(200).json({
+      status: "success",
+      message: `Organisation ${outcome} successfully.`,
+    });
   } catch (error) {
-    // wrap the multi-write soft-delete in a transaction so a failure
-    // between the `status` flip and the `is_deleted` flip can't leave the
-    // row in a half-deactivated state.
+    next(error);
+  }
+};
 
-    const isForeignKeyError =
-      error.name === "SequelizeForeignKeyConstraintError" ||
-      error.message.includes("events_organisation_id_fkey");
-    // found out that my local DB throws a message with the error name inside, but not the actual error
-    // so, I will simply leave it here.
-
-    if (isForeignKeyError) {
-      try {
-        await sequelize.transaction(async (t) => {
-          const orgToSoftDelete = await Organisation.findByPk(
-            req.params.organisationId,
-            { lock: t.LOCK.UPDATE, transaction: t },
-          );
-          orgToSoftDelete.status = "inactive";
-          orgToSoftDelete.is_deleted = true;
-          await orgToSoftDelete.save({ transaction: t });
-        });
-
-        return res.status(200).json({
-          status: "success",
-          message:
-            "Organisation has historical events. It has been deactivated instead of deleted.",
-        });
-      } catch (softDeleteError) {
-        return next(softDeleteError);
-      }
-    }
-
-    // if it was any other error, pass it to the global handler
+const restoreOrganisation = async (req, res, next) => {
+  try {
+    const organisation = await restoreRecord(Organisation, {
+      id: req.params.organisationId,
+    });
+    res.status(200).json({ status: "success", data: organisation });
+  } catch (error) {
     next(error);
   }
 };
@@ -238,6 +219,7 @@ module.exports = {
   getOrganisation,
   updateOrganisation,
   deleteOrganisation,
+  restoreOrganisation,
   addOwner,
   removeOwner,
 };

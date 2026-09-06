@@ -128,7 +128,6 @@ describe("Event API Endpoints", () => {
       organisation_id: targetOrgId,
       name: "KPI 2025",
       status: "completed",
-      is_deleted: false,
     });
     softDeleteEventId = softDeleteEvent.id;
 
@@ -342,19 +341,20 @@ describe("Event API Endpoints", () => {
       );
     });
 
-    it("should soft-delete an Event if it has historical Round dependencies", async () => {
+    it("should archive an Event even if it has historical Round dependencies", async () => {
       const res = await request(app)
         .delete(`/api/events/${softDeleteEventId}`)
         .set("Authorization", `Bearer ${ownerToken}`);
 
       expect(res.statusCode).toEqual(200);
-      expect(res.body.message).toMatch(
-        /Event deactivated due to historical records/i,
-      );
+      expect(res.body.message).toMatch(/Event archived successfully/i);
 
-      // verify the soft-delete state
-      const dbCheck = await Event.findByPk(softDeleteEventId);
-      expect(dbCheck.is_deleted).toBe(true);
+      // hidden from default queries, preserved with an archival timestamp
+      expect(await Event.findByPk(softDeleteEventId)).toBeNull();
+      const dbCheck = await Event.findByPk(softDeleteEventId, {
+        paranoid: false,
+      });
+      expect(dbCheck.archived_at).not.toBeNull();
     });
 
     it("should return 404 if attempting to update an event that is already soft-deleted", async () => {
@@ -367,12 +367,13 @@ describe("Event API Endpoints", () => {
       expect(res.body.message).toMatch(/Event not found/i);
     });
 
-    it("should hard-delete an Event with no associated relational records", async () => {
+    it("should archive an Event with no associated relational records by default", async () => {
       const res = await request(app)
         .delete(`/api/events/${standardEventId}`)
         .set("Authorization", `Bearer ${ownerToken}`);
 
-      expect(res.statusCode).toEqual(204);
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.message).toMatch(/Event archived successfully/i);
 
       // verify removal from the DB
       const dbCheck = await Event.findByPk(standardEventId);

@@ -10,7 +10,22 @@ module.exports = (sequelize) => {
       is_temporary: { type: DataTypes.BOOLEAN, defaultValue: false },
       is_eliminated: { type: DataTypes.BOOLEAN, defaultValue: false },
     },
-    { tableName: "teams", timestamps: false },
+    {
+      tableName: "teams",
+      paranoid: true,
+      deletedAt: "archived_at",
+      timestamps: true,
+      createdAt: false,
+      updatedAt: false,
+      indexes: [
+        {
+          unique: true,
+          fields: ["event_id", "name"],
+          name: "unique_team_name_per_event",
+          where: { archived_at: null },
+        },
+      ],
+    },
   );
 
   Team.associate = (models) => {

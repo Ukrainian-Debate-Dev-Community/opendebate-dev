@@ -34,7 +34,7 @@ const addOrganizer = async (req, res, next) => {
     }
 
     const event = await Event.findByPk(eventId);
-    if (!event || event.status == "completed" || event.is_deleted)
+    if (!event || event.status == "completed")
       throw new AppError("Event not found.", 404);
 
     const user = await User.findByPk(targetUserId);
