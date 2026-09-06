@@ -18,15 +18,14 @@ module.exports = (sequelize) => {
       },
       online: { type: DataTypes.BOOLEAN, defaultValue: false },
       link: { type: DataTypes.STRING(255), allowNull: true },
-      created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
     },
     {
       tableName: "organisations",
       paranoid: true,
       deletedAt: "archived_at",
       timestamps: true,
-      createdAt: false,
-      updatedAt: false,
+      createdAt: "created_at",
+      updatedAt: "updated_at",
     },
   );
 

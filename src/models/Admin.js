@@ -7,7 +7,12 @@ module.exports = (sequelize) => {
       user_id: { type: DataTypes.INTEGER, primaryKey: true },
       granted_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
     },
-    { tableName: "admins" },
+    {
+      tableName: "admins",
+      timestamps: true,
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+    },
   );
 
   Admin.associate = (models) => {

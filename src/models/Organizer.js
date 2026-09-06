@@ -9,7 +9,12 @@ module.exports = (sequelize) => {
       event_id: { type: DataTypes.INTEGER, allowNull: false },
       granted_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
     },
-    { tableName: "organizers" },
+    {
+      tableName: "organizers",
+      timestamps: true,
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+    },
   );
 
   Organizer.associate = (models) => {

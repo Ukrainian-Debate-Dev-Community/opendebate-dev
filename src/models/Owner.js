@@ -9,7 +9,12 @@ module.exports = (sequelize) => {
       organisation_id: { type: DataTypes.INTEGER, allowNull: false },
       granted_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
     },
-    { tableName: "owners" },
+    {
+      tableName: "owners",
+      timestamps: true,
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+    },
   );
 
   Owner.associate = (models) => {

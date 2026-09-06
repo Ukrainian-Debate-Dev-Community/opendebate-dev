@@ -13,7 +13,12 @@ module.exports = (sequelize) => {
         validate: { isIn: [["chair", "panelist", "trainee"]] },
       },
     },
-    { tableName: "room_adjudicators" },
+    {
+      tableName: "room_adjudicators",
+      timestamps: true,
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+    },
   );
 
   RoomAdjudicator.associate = (models) => {
