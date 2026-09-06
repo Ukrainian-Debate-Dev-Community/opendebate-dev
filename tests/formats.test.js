@@ -325,15 +325,21 @@ describe("Format API Endpoints", () => {
       );
     });
 
-    it("should return 400 if the format is currently in use (FK Constraint)", async () => {
+    it("should archive an in-use format, and refuse to hard-delete it", async () => {
       const res = await request(app)
         .delete(`/api/formats/${inUseFormatId}`)
         .set("Authorization", `Bearer ${adminToken}`);
 
-      expect(res.statusCode).toEqual(400);
-      expect(res.body.message).toMatch(
-        /currently being used by existing rooms/i,
-      );
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.message).toMatch(/Format archived successfully/i);
+
+      // rooms still reference it; a permanent delete must be blocked
+      const hardRes = await request(app)
+        .delete(`/api/formats/${inUseFormatId}?hard=true`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(hardRes.statusCode).toEqual(409);
+      expect(hardRes.body.message).toMatch(/dependent records exist/i);
     });
 
     it("should return 404 if attempting to delete a non-existent format", async () => {
@@ -351,7 +357,7 @@ describe("Format API Endpoints", () => {
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(res.statusCode).toEqual(200);
-      expect(res.body.message).toMatch(/Format deleted successfully/i);
+      expect(res.body.message).toMatch(/Format archived successfully/i);
 
       // verify it is completely gone
       const dbCheck = await Format.findByPk(standardFormatId);

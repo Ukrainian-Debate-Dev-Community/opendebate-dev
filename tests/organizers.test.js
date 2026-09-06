@@ -163,8 +163,8 @@ describe("Organiser API Endpoints", () => {
         organisation_id: orgId,
         name: "Deleted Event",
         status: "scheduled",
-        is_deleted: true,
       });
+      await deletedEvent.destroy(); // archive it
 
       const res = await request(app)
         .post(`/api/events/${deletedEvent.id}/organizers`)

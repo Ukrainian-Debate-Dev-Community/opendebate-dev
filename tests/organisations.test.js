@@ -314,30 +314,31 @@ describe("Organisation API Endpoints", () => {
       expect(res.body.message).toMatch(/Organisation not found/i);
     });
 
-    it("should soft-delete if the Organisation has historical events", async () => {
+    it("should archive an Organisation that has historical events", async () => {
       const res = await request(app)
         .delete(`/api/organisations/${softDeleteOrgId}`)
         .set("Authorization", `Bearer ${adminToken}`);
 
       expect(res.statusCode).toEqual(200);
-      expect(res.body.message).toMatch(
-        /Organisation has historical events. It has been deactivated instead of deleted/i,
-      );
+      expect(res.body.message).toMatch(/Organisation archived successfully/i);
 
-      // verify the soft-delete state in the DB
-      const dbCheck = await Organisation.findByPk(softDeleteOrgId);
-      expect(dbCheck.status).toBe("inactive");
-      expect(dbCheck.is_deleted).toBe(true);
+      // hidden from default queries, preserved with an archival timestamp
+      expect(await Organisation.findByPk(softDeleteOrgId)).toBeNull();
+      const dbCheck = await Organisation.findByPk(softDeleteOrgId, {
+        paranoid: false,
+      });
+      expect(dbCheck.archived_at).not.toBeNull();
     });
 
-    it("should hard-delete an empty Organisation", async () => {
+    it("should archive an empty Organisation by default", async () => {
       const res = await request(app)
         .delete(`/api/organisations/${standardOrgId}`)
         .set("Authorization", `Bearer ${adminToken}`);
 
-      expect(res.statusCode).toEqual(204);
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.message).toMatch(/Organisation archived successfully/i);
 
-      // verify it is completely gone
+      // hidden from default queries
       const dbCheck = await Organisation.findByPk(standardOrgId);
       expect(dbCheck).toBeNull();
     });

@@ -427,7 +427,7 @@ describe("Event Participant API Endpoints", () => {
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.status).toBe("success");
-      expect(res.body.message).toMatch(/Participant removed/i);
+      expect(res.body.message).toMatch(/Participant archived/i);
 
       // verify deletion in database
       const dbCheck = await EventParticipant.findByPk(linkedParticipantId);
