@@ -8,7 +8,6 @@ const {
   Event,
   Round,
   Room,
-  Team,
   Format,
   EventParticipant,
 } = require("../src/models");
