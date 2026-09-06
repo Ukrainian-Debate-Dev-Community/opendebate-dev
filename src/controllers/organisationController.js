@@ -1,5 +1,6 @@
 const { Organisation, Owner, User, sequelize } = require("../models");
 const AppError = require("../utils/AppError");
+const { paginate } = require("../utils/pagination");
 const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 
 const createOrganisation = async (req, res, next) => {
@@ -54,6 +55,8 @@ const getAllOrganisations = async (req, res, next) => {
       where: includeArchived ? {} : { status: "active" },
       paranoid: !includeArchived,
       include: [{ model: User, as: "Owners", attributes: ["id", "username"] }],
+      order: [["id", "ASC"]],
+      ...paginate(req.query),
     });
     res.status(200).json({ status: "success", data: organisations });
   } catch (error) {

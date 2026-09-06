@@ -1,5 +1,6 @@
 const { Conflict, EventParticipant, Team } = require("../models");
 const AppError = require("../utils/AppError");
+const { paginate } = require("../utils/pagination");
 const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 
 const createConflict = async (req, res, next) => {
@@ -109,6 +110,7 @@ const getEventConflicts = async (req, res, next) => {
         },
       ],
       order: [["id", "DESC"]],
+      ...paginate(req.query),
     });
 
     res.status(200).json({ status: "success", data: conflicts });
