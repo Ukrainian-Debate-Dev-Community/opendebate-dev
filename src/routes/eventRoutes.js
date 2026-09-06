@@ -98,6 +98,8 @@ router.get(
   "/organisation/:organisationId",
   eventController.getOrganisationEvents,
 );
+// registered after /organisation/:organisationId so that literal path wins
+router.get("/:eventId", eventController.getEventById);
 router.post("/:organisationId", restrictToOwnOrg, eventController.createEvent);
 router.put("/:eventId", restrictToOwnOrg, eventController.updateEvent);
 router.delete("/:eventId", restrictToOwnOrg, eventController.deleteEvent);
