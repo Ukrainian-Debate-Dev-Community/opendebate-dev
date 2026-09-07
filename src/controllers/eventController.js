@@ -55,6 +55,17 @@ const getOrganisationEvents = async (req, res, next) => {
   }
 };
 
+const getEventById = async (req, res, next) => {
+  try {
+    const event = await Event.findByPk(req.params.eventId);
+    if (!event) throw new AppError("Event not found.", 404);
+
+    res.status(200).json({ status: "success", data: event });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const updateEvent = async (req, res, next) => {
   try {
     const { name, start_date, end_date, status, is_ranked } = req.body;
@@ -109,6 +120,7 @@ module.exports = {
   checkEventAccess,
   createEvent,
   getOrganisationEvents,
+  getEventById,
   updateEvent,
   deleteEvent,
   restoreEvent,
