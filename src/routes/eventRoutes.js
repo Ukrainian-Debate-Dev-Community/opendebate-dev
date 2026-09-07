@@ -17,6 +17,9 @@ const participantRoutes = require("./eventParticipantRoutes");
 const organizerRoutes = require("./organizerRoutes");
 const conflictRoutes = require("./conflictRoutes");
 
+// public listing — registered before verifyToken so it stays unauthenticated
+router.get("/", eventController.listPublicEvents);
+
 router.use(verifyToken);
 
 // pass the eventId down
