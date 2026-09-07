@@ -11,6 +11,7 @@ const {
 } = require("../models");
 const { Op } = require("sequelize");
 const AppError = require("../utils/AppError");
+const { paginate } = require("../utils/pagination");
 const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 
 const createTeam = async (req, res, next) => {
@@ -185,6 +186,7 @@ const getEventTeams = async (req, res, next) => {
         },
       ],
       order: [["id", "ASC"]],
+      ...paginate(req.query),
     });
 
     // clean the payload

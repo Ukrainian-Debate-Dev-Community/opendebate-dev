@@ -1,5 +1,6 @@
 const { Round, Event } = require("../models");
 const AppError = require("../utils/AppError");
+const { paginate } = require("../utils/pagination");
 const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 
 const getEventRounds = async (req, res, next) => {
@@ -9,6 +10,7 @@ const getEventRounds = async (req, res, next) => {
     const rounds = await Round.findAll({
       where: { event_id: eventId },
       order: [["sequence", "ASC"]],
+      ...paginate(req.query),
     });
 
     res.status(200).json({ status: "success", data: rounds });

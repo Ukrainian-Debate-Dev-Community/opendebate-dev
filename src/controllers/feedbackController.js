@@ -11,6 +11,7 @@ const {
   sequelize,
 } = require("../models");
 const AppError = require("../utils/AppError");
+const { paginate } = require("../utils/pagination");
 const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 const { hasEventPrivilege } = require("../middleware/authMiddleware");
 
@@ -199,6 +200,7 @@ const getEventFeedback = async (req, res, next) => {
         { model: Team, as: "IssuerTeam", attributes: ["id", "name"] },
       ],
       order: [["id", "DESC"]],
+      ...paginate(req.query),
     });
 
     res.status(200).json({ status: "success", data: feedbackRecords });

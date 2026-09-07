@@ -256,7 +256,7 @@ describe("Event Participant API Endpoints", () => {
 
   // GET part
   describe("GET /api/events/:eventId/participants", () => {
-    it("should retrieve paginated participants without leaking claim token hashes", async () => {
+    it("should retrieve participants without leaking claim token hashes", async () => {
       const res = await request(app)
         .get(`/api/events/${targetEventId}/participants?page=1&limit=10`)
         .set("Authorization", `Bearer ${randomToken}`); // no restrictions on the route, so should work
@@ -264,15 +264,12 @@ describe("Event Participant API Endpoints", () => {
       expect(res.statusCode).toEqual(200);
       expect(res.body.status).toBe("success");
 
-      // checking the pagination object structure
-      expect(res.body.data.total_participants).toBeGreaterThanOrEqual(4);
-      expect(res.body.data.current_page).toBe(1);
-      expect(Array.isArray(res.body.data.participants)).toBe(true);
+      // unified list shape: plain array, opt-in pagination
+      expect(Array.isArray(res.body.data)).toBe(true);
+      expect(res.body.data.length).toBeGreaterThanOrEqual(4);
 
       // verify claim_token_hash is excluded
-      const guest = res.body.data.participants.find(
-        (p) => p.id === guestParticipantId,
-      );
+      const guest = res.body.data.find((p) => p.id === guestParticipantId);
       expect(guest.claim_token_hash).toBeUndefined();
     });
   });

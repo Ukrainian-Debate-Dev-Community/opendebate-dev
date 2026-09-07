@@ -8,6 +8,7 @@ const {
   sequelize,
 } = require("../models");
 const AppError = require("../utils/AppError");
+const { paginate } = require("../utils/pagination");
 const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 const { hasEventPrivilege } = require("../middleware/authMiddleware");
 
@@ -95,28 +96,14 @@ const getEventParticipants = async (req, res, next) => {
   try {
     const eventId = req.params.eventId;
 
-    // pagination variables
-    const page = parseInt(req.query.page, 10) || 1;
-    const limit = parseInt(req.query.limit, 10) || 50;
-    const offset = (page - 1) * limit;
-
-    const { count, rows } = await EventParticipant.findAndCountAll({
+    const participants = await EventParticipant.findAll({
       where: { event_id: eventId },
       attributes: { exclude: ["claim_token_hash"] }, // no tokens
-      limit: limit,
-      offset: offset,
       order: [["id", "ASC"]],
+      ...paginate(req.query),
     });
 
-    res.status(200).json({
-      status: "success",
-      data: {
-        total_participants: count,
-        total_pages: Math.ceil(count / limit),
-        current_page: page,
-        participants: rows,
-      },
-    });
+    res.status(200).json({ status: "success", data: participants });
   } catch (error) {
     next(error);
   }

@@ -1,5 +1,6 @@
 const { Motion, Event } = require("../models");
 const AppError = require("../utils/AppError");
+const { paginate } = require("../utils/pagination");
 const { hasEventPrivilege } = require("../middleware/authMiddleware");
 const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 
@@ -36,6 +37,8 @@ const getMotions = async (req, res, next) => {
     const eventId = req.params.eventId;
     const motions = await Motion.findAll({
       where: { event_id: eventId },
+      order: [["id", "ASC"]],
+      ...paginate(req.query),
     });
 
     if (!motions || motions.length === 0) {

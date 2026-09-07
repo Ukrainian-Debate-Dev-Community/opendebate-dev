@@ -1,5 +1,6 @@
 const { Event } = require("../models");
 const AppError = require("../utils/AppError");
+const { paginate } = require("../utils/pagination");
 const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 
 const checkEventAccess = async (req, res, next) => {
@@ -47,6 +48,8 @@ const getOrganisationEvents = async (req, res, next) => {
     const events = await Event.findAll({
       where: { organisation_id: req.params.organisationId },
       paranoid: !includeArchived,
+      order: [["id", "ASC"]],
+      ...paginate(req.query),
     });
 
     res.status(200).json({ status: "success", data: events });
