@@ -224,6 +224,37 @@ describe("Event API Endpoints", () => {
     });
   });
 
+  describe("GET /api/events/:eventId", () => {
+    it("should retrieve a single event by id", async () => {
+      const res = await request(app)
+        .get(`/api/events/${standardEventId}`)
+        .set("Authorization", `Bearer ${randomToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.status).toBe("success");
+      expect(res.body.data.id).toEqual(standardEventId);
+      expect(res.body.data.name).toBeDefined();
+    });
+
+    it("should return 404 for a non-existent event", async () => {
+      const res = await request(app)
+        .get("/api/events/99999")
+        .set("Authorization", `Bearer ${randomToken}`);
+
+      expect(res.statusCode).toEqual(404);
+      expect(res.body.message).toMatch(/Event not found/i);
+    });
+
+    it("should not shadow the organisation listing route", async () => {
+      const res = await request(app)
+        .get(`/api/events/organisation/${targetOrgId}`)
+        .set("Authorization", `Bearer ${randomToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      expect(Array.isArray(res.body.data)).toBe(true);
+    });
+  });
+
   // GET ACCESS part
   describe("GET /api/events/:eventId/access", () => {
     it("should return true for an Admin", async () => {
