@@ -9,7 +9,12 @@ module.exports = (sequelize) => {
       room_adjudicator_id: { type: DataTypes.INTEGER, allowNull: false },
       value: { type: DataTypes.SMALLINT, allowNull: false },
     },
-    { tableName: "scores" },
+    {
+      tableName: "scores",
+      timestamps: true,
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+    },
   );
 
   Score.associate = (models) => {
