@@ -172,6 +172,8 @@ paths:
       summary: List active organisations
       parameters:
         - $ref: "#/components/parameters/includeArchived"
+        - $ref: "#/components/parameters/listPage"
+        - $ref: "#/components/parameters/listLimit"
       responses:
         "200":
           $ref: "#/components/responses/Success"
@@ -330,6 +332,8 @@ paths:
       parameters:
         - $ref: "#/components/parameters/organisationId"
         - $ref: "#/components/parameters/includeArchived"
+        - $ref: "#/components/parameters/listPage"
+        - $ref: "#/components/parameters/listLimit"
       responses:
         "200": { $ref: "#/components/responses/Success" }
 
@@ -459,6 +463,9 @@ paths:
     get:
       tags: [rounds]
       summary: List an event's rounds (ordered by sequence)
+      parameters:
+        - $ref: "#/components/parameters/listPage"
+        - $ref: "#/components/parameters/listLimit"
       responses:
         "200": { $ref: "#/components/responses/Success" }
     post:
@@ -532,6 +539,9 @@ paths:
     get:
       tags: [teams]
       summary: List an event's teams with members
+      parameters:
+        - $ref: "#/components/parameters/listPage"
+        - $ref: "#/components/parameters/listLimit"
       responses:
         "200": { $ref: "#/components/responses/Success" }
     post:
@@ -627,6 +637,9 @@ paths:
     get:
       tags: [participants]
       summary: List event participants
+      parameters:
+        - $ref: "#/components/parameters/listPage"
+        - $ref: "#/components/parameters/listLimit"
       responses:
         "200": { $ref: "#/components/responses/Success" }
     post:
@@ -727,6 +740,9 @@ paths:
     get:
       tags: [conflicts]
       summary: List event conflicts (Owner/Organizer)
+      parameters:
+        - $ref: "#/components/parameters/listPage"
+        - $ref: "#/components/parameters/listLimit"
       responses:
         "200": { $ref: "#/components/responses/Success" }
     post:
@@ -778,6 +794,9 @@ paths:
     get:
       tags: [motions]
       summary: List motions — unreleased motion text is masked for unprivileged users
+      parameters:
+        - $ref: "#/components/parameters/listPage"
+        - $ref: "#/components/parameters/listLimit"
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -851,6 +870,8 @@ paths:
       summary: List an event's adjudicator feedback (Owner/Organizer)
       parameters:
         - $ref: "#/components/parameters/eventId"
+        - $ref: "#/components/parameters/listPage"
+        - $ref: "#/components/parameters/listLimit"
       responses:
         "200": { $ref: "#/components/responses/Success" }
 
@@ -1148,6 +1169,19 @@ components:
       name: limit
       in: query
       schema: { type: integer, default: 5 }
+    listPage:
+      name: page
+      in: query
+      description: "Page number (used only when limit is provided)"
+      schema: { type: integer, default: 1 }
+    listLimit:
+      name: limit
+      in: query
+      description: >-
+        Opt-in pagination: when set (1-100), the listing is sliced;
+        when omitted, the complete list is returned. The last page is
+        signalled by fewer rows than the limit.
+      schema: { type: integer, minimum: 1, maximum: 100 }
 
   requestBodies:
     Credentials:
