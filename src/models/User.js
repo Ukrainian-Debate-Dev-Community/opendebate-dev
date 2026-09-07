@@ -8,10 +8,12 @@ module.exports = (sequelize) => {
       username: { type: DataTypes.STRING(64), allowNull: false },
       password: { type: DataTypes.STRING(255), allowNull: false },
       is_deleted: { type: DataTypes.BOOLEAN, defaultValue: false },
-      created_at: { type: DataTypes.DATE, defaultValue: DataTypes.NOW },
     },
     {
       tableName: "users",
+      timestamps: true,
+      createdAt: "created_at",
+      updatedAt: "updated_at",
       indexes: [
         { unique: true, fields: ["username"] },
         {
