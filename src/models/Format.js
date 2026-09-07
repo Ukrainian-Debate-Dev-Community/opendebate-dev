@@ -18,8 +18,8 @@ module.exports = (sequelize) => {
       paranoid: true,
       deletedAt: "archived_at",
       timestamps: true,
-      createdAt: false,
-      updatedAt: false,
+      createdAt: "created_at",
+      updatedAt: "updated_at",
     },
   );
 

@@ -12,6 +12,9 @@ module.exports = (sequelize) => {
     },
     {
       tableName: "room_teams",
+      timestamps: true,
+      createdAt: "created_at",
+      updatedAt: "updated_at",
       indexes: [{ unique: true, fields: ["room_id", "team_id"] }],
     },
   );

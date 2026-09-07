@@ -1,0 +1,1256 @@
+openapi: 3.0.3
+info:
+  title: OpenDebate API
+  description: >
+    REST API for the OpenDebate backend — a record-keeping system for managing
+    debates, from single club events to tournaments, with persistent users.
+
+    All responses use the envelope `{status, data?, message?}` where `status`
+    is `"success"` or `"fail"`/`"error"`. Deletion archives by default
+    (`archived_at` timestamp); permanent deletion requires `?hard=true` and an
+    Admin. Archived records are hidden from default queries, listable via
+    `?include_archived=true`, and recoverable via `PATCH .../restore`.
+  version: 2.0.0
+servers:
+  - url: /api
+
+security:
+  - bearerAuth: []
+
+tags:
+  - name: users
+  - name: admins
+  - name: organisations
+  - name: formats
+  - name: events
+  - name: participants
+  - name: organizers
+  - name: teams
+  - name: rounds
+  - name: rooms
+  - name: motions
+  - name: scoring
+  - name: standings
+  - name: feedback
+  - name: conflicts
+
+paths:
+  # ────────────────────────── users ──────────────────────────
+  /users/register:
+    post:
+      tags: [users]
+      summary: Register a new user
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/Credentials"
+      responses:
+        "201":
+          $ref: "#/components/responses/AuthSuccess"
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /users/login:
+    post:
+      tags: [users]
+      summary: Log in (rate limited)
+      security: []
+      requestBody:
+        $ref: "#/components/requestBodies/Credentials"
+      responses:
+        "200":
+          $ref: "#/components/responses/AuthSuccess"
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /users/password:
+    put:
+      tags: [users]
+      summary: Change own password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [oldPassword, newPassword]
+              properties:
+                oldPassword: { type: string }
+                newPassword: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /users/username:
+    put:
+      tags: [users]
+      summary: Change own username
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username]
+              properties:
+                username: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /users:
+    delete:
+      tags: [users]
+      summary: Delete own account (anonymised when historical records exist)
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "204": { description: Account permanently deleted }
+
+  /users/history:
+    get:
+      tags: [users]
+      summary: Own past events, split by role
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/limit"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+
+  /users/schedule:
+    get:
+      tags: [users]
+      summary: Own upcoming events, split by role
+      parameters:
+        - $ref: "#/components/parameters/page"
+        - $ref: "#/components/parameters/limit"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+
+  /users/{id}/stats:
+    get:
+      tags: [users]
+      summary: Aggregated speaker statistics for a user (visible rounds only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /users/claim-participant/{participantId}:
+    post:
+      tags: [users]
+      summary: Claim a guest participant record with its claim token
+      parameters:
+        - $ref: "#/components/parameters/participantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [claim_token]
+              properties:
+                claim_token: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  # ────────────────────────── admins ──────────────────────────
+  /admins/grant:
+    post:
+      tags: [admins]
+      summary: Grant platform Admin to a user (Admin only)
+      requestBody:
+        $ref: "#/components/requestBodies/TargetUser"
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ────────────────────────── organisations ──────────────────────────
+  /organisations:
+    get:
+      tags: [organisations]
+      summary: List active organisations
+      parameters:
+        - $ref: "#/components/parameters/includeArchived"
+      responses:
+        "200":
+          $ref: "#/components/responses/Success"
+    post:
+      tags: [organisations]
+      summary: Create an organisation with an initial owner (Admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, owner_id]
+              properties:
+                name: { type: string }
+                type: { type: string, enum: [academic, personal] }
+                online: { type: boolean }
+                link: { type: string, nullable: true }
+                owner_id: { type: integer }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /organisations/{organisationId}:
+    parameters:
+      - $ref: "#/components/parameters/organisationId"
+    get:
+      tags: [organisations]
+      summary: Get one organisation with its owners
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [organisations]
+      summary: Update an organisation (Owner)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                type: { type: string, enum: [academic, personal] }
+                online: { type: boolean }
+                link: { type: string, nullable: true }
+                status: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [organisations]
+      summary: Archive an organisation (Admin; ?hard=true to purge)
+      parameters:
+        - $ref: "#/components/parameters/hard"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /organisations/{organisationId}/restore:
+    patch:
+      tags: [organisations]
+      summary: Restore an archived organisation (Admin)
+      parameters:
+        - $ref: "#/components/parameters/organisationId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /organisations/{organisationId}/owners:
+    post:
+      tags: [organisations]
+      summary: Add an owner (Owner)
+      parameters:
+        - $ref: "#/components/parameters/organisationId"
+      requestBody:
+        $ref: "#/components/requestBodies/TargetUser"
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /organisations/{organisationId}/owners/{ownerId}:
+    delete:
+      tags: [organisations]
+      summary: Remove an owner — the last owner cannot be removed (Admin)
+      parameters:
+        - $ref: "#/components/parameters/organisationId"
+        - { name: ownerId, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  # ────────────────────────── formats ──────────────────────────
+  /formats:
+    get:
+      tags: [formats]
+      summary: List formats
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    post:
+      tags: [formats]
+      summary: Create a format (Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FormatInput" }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /formats/{formatId}:
+    parameters:
+      - $ref: "#/components/parameters/formatId"
+    get:
+      tags: [formats]
+      summary: Get one format
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [formats]
+      summary: Update a format (Admin)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FormatInput" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    delete:
+      tags: [formats]
+      summary: Archive a format (Admin; ?hard=true to purge, blocked while rooms use it)
+      parameters:
+        - $ref: "#/components/parameters/hard"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /formats/{formatId}/restore:
+    patch:
+      tags: [formats]
+      summary: Restore an archived format (Admin)
+      parameters:
+        - $ref: "#/components/parameters/formatId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ────────────────────────── events ──────────────────────────
+  /events/organisation/{organisationId}:
+    get:
+      tags: [events]
+      summary: List an organisation's events
+      parameters:
+        - $ref: "#/components/parameters/organisationId"
+        - $ref: "#/components/parameters/includeArchived"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+
+  /events/{eventId}:
+    parameters:
+      - $ref: "#/components/parameters/eventId"
+    post:
+      tags: [events]
+      summary: Create an event in an organisation (Owner)
+      description: >
+        API quirk: for this POST the path parameter is the ORGANISATION id,
+        not an event id — the route is `POST /events/:organisationId` sharing
+        the URL shape of the event-detail routes.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name]
+              properties:
+                name: { type: string }
+                start_date: { type: string, format: date, nullable: true }
+                end_date: { type: string, format: date, nullable: true }
+                is_ranked: { type: boolean }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+    get:
+      tags: [events]
+      summary: Get one event (added in PR #60)
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [events]
+      summary: Update an event (Owner/Organizer)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                start_date: { type: string, format: date, nullable: true }
+                end_date: { type: string, format: date, nullable: true }
+                status:
+                  type: string
+                  enum: [scheduled, in_progress, completed]
+                is_ranked: { type: boolean }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [events]
+      summary: Archive an event (Owner/Organizer; ?hard=true Admin-only purge)
+      parameters:
+        - $ref: "#/components/parameters/hard"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /events/{eventId}/restore:
+    patch:
+      tags: [events]
+      summary: Restore an archived event (Owner/Organizer)
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /events/{eventId}/access:
+    get:
+      tags: [events]
+      summary: Server-side privilege check for the current user on this event
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      responses:
+        "200":
+          description: Privilege flag
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      isPrivileged: { type: boolean }
+
+  /events/{eventId}/eliminations:
+    patch:
+      tags: [events]
+      summary: Mark teams and/or speaker participants (not) eliminated (Owner/Organizer)
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status]
+              properties:
+                status:
+                  type: boolean
+                  description: true = eliminate, false = reinstate
+                team_ids:
+                  type: array
+                  items: { type: integer }
+                participant_ids:
+                  type: array
+                  items: { type: integer }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  # ─── rounds (event-scoped) ───
+  /events/{eventId}/rounds:
+    parameters:
+      - $ref: "#/components/parameters/eventId"
+    get:
+      tags: [rounds]
+      summary: List an event's rounds (ordered by sequence)
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    post:
+      tags: [rounds]
+      summary: Create a round (Owner/Organizer)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, sequence]
+              properties:
+                name: { type: string }
+                sequence: { type: integer }
+                is_hidden: { type: boolean }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /events/{eventId}/rounds/release-all:
+    patch:
+      tags: [rounds]
+      summary: Un-hide every round of the event (Owner/Organizer)
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+
+  # ─── standings (event-scoped) ───
+  /events/{eventId}/standings/teams:
+    get:
+      tags: [standings]
+      summary: Raw team ranks per room
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+
+  /events/{eventId}/standings/speakers:
+    get:
+      tags: [standings]
+      summary: Raw speaker ranks per room
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+
+  /events/{eventId}/standings/calculated/teams:
+    get:
+      tags: [standings]
+      summary: Calculated team standings (points derived from ranks)
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+
+  /events/{eventId}/standings/calculated/speakers:
+    get:
+      tags: [standings]
+      summary: Calculated speaker standings
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+
+  # ─── teams (event-scoped) ───
+  /events/{eventId}/teams:
+    parameters:
+      - $ref: "#/components/parameters/eventId"
+    get:
+      tags: [teams]
+      summary: List an event's teams with members
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    post:
+      tags: [teams]
+      summary: Create a team (Owner/Organizer)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, participant_ids]
+              properties:
+                name: { type: string }
+                participant_ids:
+                  type: array
+                  items: { type: integer }
+                  description: Duplicates allowed (iron-person)
+                is_temporary: { type: boolean, default: false }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "409":
+          description: Participant already in a permanent team, or name taken
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Error" }
+
+  /events/{eventId}/teams/auto-generate:
+    get:
+      tags: [teams]
+      summary: Propose random teams from unassigned speakers (Owner/Organizer)
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+        - name: format_id
+          in: query
+          required: true
+          schema: { type: integer }
+      responses:
+        "200":
+          description: Proposed (not persisted) teams
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      proposed_teams:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            name: { type: string }
+                            participant_ids:
+                              type: array
+                              items: { type: integer }
+
+  /events/{eventId}/teams/{teamId}:
+    parameters:
+      - $ref: "#/components/parameters/eventId"
+      - $ref: "#/components/parameters/teamId"
+    put:
+      tags: [teams]
+      summary: Update a team (Owner/Organizer)
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    delete:
+      tags: [teams]
+      summary: Archive a team — blocked while assigned to a room (Owner/Organizer; ?hard=true Admin)
+      parameters:
+        - $ref: "#/components/parameters/hard"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /events/{eventId}/teams/{teamId}/restore:
+    patch:
+      tags: [teams]
+      summary: Restore an archived team (Owner/Organizer)
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+        - $ref: "#/components/parameters/teamId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ─── participants (event-scoped) ───
+  /events/{eventId}/participants:
+    parameters:
+      - $ref: "#/components/parameters/eventId"
+    get:
+      tags: [participants]
+      summary: List event participants
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    post:
+      tags: [participants]
+      summary: Register a participant (platform user or guest)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                user_id:
+                  type: integer
+                  nullable: true
+                  description: Omit for a guest; a claim token is generated
+                display_name: { type: string }
+                role: { type: string, enum: [speaker, adjudicator] }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /events/{eventId}/participants/{participantId}:
+    parameters:
+      - $ref: "#/components/parameters/eventId"
+      - $ref: "#/components/parameters/participantId"
+    put:
+      tags: [participants]
+      summary: Update a participant (Owner/Organizer)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                display_name: { type: string }
+                role: { type: string, enum: [speaker, adjudicator] }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    delete:
+      tags: [participants]
+      summary: Archive a participant — blocked while assigned as room adjudicator (Owner/Organizer; ?hard=true Admin)
+      parameters:
+        - $ref: "#/components/parameters/hard"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /events/{eventId}/participants/{participantId}/restore:
+    patch:
+      tags: [participants]
+      summary: Restore an archived participant (Owner/Organizer)
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+        - $ref: "#/components/parameters/participantId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ─── organizers (event-scoped) ───
+  /events/{eventId}/organizers:
+    parameters:
+      - $ref: "#/components/parameters/eventId"
+    get:
+      tags: [organizers]
+      summary: List event organizers
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    post:
+      tags: [organizers]
+      summary: Delegate event management to a user (Owner)
+      requestBody:
+        $ref: "#/components/requestBodies/TargetUser"
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /events/{eventId}/organizers/{targetUserId}:
+    delete:
+      tags: [organizers]
+      summary: Remove an organizer (Owner)
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+        - name: targetUserId
+          in: path
+          required: true
+          schema: { type: integer }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  # ─── conflicts (event-scoped) ───
+  /events/{eventId}/conflicts:
+    parameters:
+      - $ref: "#/components/parameters/eventId"
+    get:
+      tags: [conflicts]
+      summary: List event conflicts (Owner/Organizer)
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    post:
+      tags: [conflicts]
+      summary: Record a conflict — exactly one of target_participant_id / target_team_id (Owner/Organizer)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [issuer_participant_id]
+              properties:
+                issuer_participant_id: { type: integer }
+                target_participant_id: { type: integer, nullable: true }
+                target_team_id: { type: integer, nullable: true }
+                comment: { type: string, nullable: true }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /events/{eventId}/conflicts/{conflictId}:
+    delete:
+      tags: [conflicts]
+      summary: Archive a conflict record (Owner/Organizer; ?hard=true Admin)
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+        - $ref: "#/components/parameters/conflictId"
+        - $ref: "#/components/parameters/hard"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /events/{eventId}/conflicts/{conflictId}/restore:
+    patch:
+      tags: [conflicts]
+      summary: Restore an archived conflict record (Owner/Organizer)
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+        - $ref: "#/components/parameters/conflictId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ─── motions (event-scoped) ───
+  /events/{eventId}/motions:
+    parameters:
+      - $ref: "#/components/parameters/eventId"
+    get:
+      tags: [motions]
+      summary: List motions — unreleased motion text is masked for unprivileged users
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [motions]
+      summary: Create a motion (Owner/Organizer)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motion_text]
+              properties:
+                motion_text: { type: string }
+                infoslide: { type: string, nullable: true }
+                is_released: { type: boolean, default: false }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /events/{eventId}/motions/{motionId}:
+    parameters:
+      - $ref: "#/components/parameters/eventId"
+      - $ref: "#/components/parameters/motionId"
+    get:
+      tags: [motions]
+      summary: Get one motion — 403 while unreleased for unprivileged users
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [motions]
+      summary: Update a motion (Owner/Organizer)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                motion_text: { type: string }
+                infoslide: { type: string, nullable: true }
+                is_released: { type: boolean }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    delete:
+      tags: [motions]
+      summary: Archive a motion — rooms keep their historical reference (Owner/Organizer; ?hard=true Admin)
+      parameters:
+        - $ref: "#/components/parameters/hard"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /events/{eventId}/motions/{motionId}/restore:
+    patch:
+      tags: [motions]
+      summary: Restore an archived motion (Owner/Organizer)
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+        - $ref: "#/components/parameters/motionId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ─── event feedback listing ───
+  /events/{eventId}/feedback:
+    get:
+      tags: [feedback]
+      summary: List an event's adjudicator feedback (Owner/Organizer)
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+
+  # ────────────────────────── rounds ──────────────────────────
+  /rounds/{roundId}:
+    parameters:
+      - $ref: "#/components/parameters/roundId"
+    get:
+      tags: [rounds]
+      summary: Get one round
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    put:
+      tags: [rounds]
+      summary: Update a round (Owner/Organizer)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                sequence: { type: integer }
+                status:
+                  type: string
+                  enum: [draft, scheduled, in_progress, completed]
+                is_hidden: { type: boolean }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [rounds]
+      summary: Archive a round — blocked while in progress or completed (Owner/Organizer; ?hard=true Admin)
+      parameters:
+        - $ref: "#/components/parameters/hard"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /rounds/{roundId}/restore:
+    patch:
+      tags: [rounds]
+      summary: Restore an archived round (Owner/Organizer)
+      parameters:
+        - $ref: "#/components/parameters/roundId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /rounds/{roundId}/rooms:
+    parameters:
+      - $ref: "#/components/parameters/roundId"
+    get:
+      tags: [rooms]
+      summary: List a round's rooms with teams, speakers, and adjudicators
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+    post:
+      tags: [rooms]
+      summary: Create a room from permanent and/or temporary teams (Owner/Organizer)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [format_id, teams, adjudicators]
+              properties:
+                format_id: { type: integer }
+                motion_id: { type: integer, nullable: true }
+                teams:
+                  type: array
+                  description: One entry per position; permanent (team_id) or temporary (participant_ids + name)
+                  items:
+                    type: object
+                    required: [position]
+                    properties:
+                      position: { type: integer }
+                      team_id: { type: integer }
+                      participant_ids:
+                        type: array
+                        items: { type: integer }
+                      name: { type: string }
+                adjudicators:
+                  type: array
+                  description: At least one chair required
+                  items:
+                    type: object
+                    required: [participant_id, role]
+                    properties:
+                      participant_id: { type: integer }
+                      role:
+                        type: string
+                        enum: [chair, panelist, trainee]
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  # ────────────────────────── rooms ──────────────────────────
+  /rooms/{roomId}:
+    delete:
+      tags: [rooms]
+      summary: Archive a room and its temporary teams — blocked while judging/completed (Owner/Organizer; ?hard=true Admin)
+      parameters:
+        - $ref: "#/components/parameters/roomId"
+        - $ref: "#/components/parameters/hard"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /rooms/{roomId}/restore:
+    patch:
+      tags: [rooms]
+      summary: Restore an archived room together with its temporary teams (Owner/Organizer)
+      parameters:
+        - $ref: "#/components/parameters/roomId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /rooms/{roomId}/scores:
+    post:
+      tags: [scoring]
+      summary: Submit the room ballot (Chair or Admin) — locks the room
+      description: >
+        Team ranks must be a permutation of 1..teams_per_room; speaker scores
+        must cover every room speaker and respect the format's score bounds.
+        On success the room status becomes `completed`.
+      parameters:
+        - $ref: "#/components/parameters/roomId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [teamRankings, speakerScores]
+              properties:
+                teamRankings:
+                  type: array
+                  items:
+                    type: object
+                    required: [room_team_id, rank]
+                    properties:
+                      room_team_id: { type: integer }
+                      rank: { type: integer }
+                speakerScores:
+                  type: array
+                  items:
+                    type: object
+                    required: [room_speaker_id, score]
+                    properties:
+                      room_speaker_id: { type: integer }
+                      score: { type: number }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /rooms/{roomId}/reopen:
+    patch:
+      tags: [scoring]
+      summary: Reopen a completed room for ballot correction (Owner/Organizer/Admin)
+      description: Clears the ballot (scores and ranks) and returns the room to `judging`.
+      parameters:
+        - $ref: "#/components/parameters/roomId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /rooms/{roomId}/feedback:
+    post:
+      tags: [feedback]
+      summary: Submit feedback about a room adjudicator
+      description: Exactly one of issuer_participant_id / issuer_team_id must be set.
+      parameters:
+        - $ref: "#/components/parameters/roomId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [adjudicator_id, score]
+              properties:
+                adjudicator_id: { type: integer }
+                issuer_participant_id: { type: integer, nullable: true }
+                issuer_team_id: { type: integer, nullable: true }
+                score: { type: integer }
+                comment: { type: string, nullable: true }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  # ────────────────────────── feedback moderation ──────────────────────────
+  /feedback/{feedbackId}:
+    delete:
+      tags: [feedback]
+      summary: Archive a feedback record (Admin; ?hard=true to purge)
+      parameters:
+        - $ref: "#/components/parameters/feedbackId"
+        - $ref: "#/components/parameters/hard"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /feedback/{feedbackId}/restore:
+    patch:
+      tags: [feedback]
+      summary: Restore an archived feedback record (Admin)
+      parameters:
+        - $ref: "#/components/parameters/feedbackId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    organisationId:
+      name: organisationId
+      in: path
+      required: true
+      schema: { type: integer }
+    eventId:
+      name: eventId
+      in: path
+      required: true
+      schema: { type: integer }
+    roundId:
+      name: roundId
+      in: path
+      required: true
+      schema: { type: integer }
+    roomId:
+      name: roomId
+      in: path
+      required: true
+      schema: { type: integer }
+    teamId:
+      name: teamId
+      in: path
+      required: true
+      schema: { type: integer }
+    participantId:
+      name: participantId
+      in: path
+      required: true
+      schema: { type: integer }
+    motionId:
+      name: motionId
+      in: path
+      required: true
+      schema: { type: integer }
+    conflictId:
+      name: conflictId
+      in: path
+      required: true
+      schema: { type: integer }
+    feedbackId:
+      name: feedbackId
+      in: path
+      required: true
+      schema: { type: integer }
+    formatId:
+      name: formatId
+      in: path
+      required: true
+      schema: { type: integer }
+    hard:
+      name: hard
+      in: query
+      required: false
+      description: "true = permanently delete instead of archiving (Admin only)"
+      schema: { type: boolean }
+    includeArchived:
+      name: include_archived
+      in: query
+      required: false
+      description: "true = include archived records (marked by non-null archived_at)"
+      schema: { type: boolean }
+    page:
+      name: page
+      in: query
+      schema: { type: integer, default: 1 }
+    limit:
+      name: limit
+      in: query
+      schema: { type: integer, default: 5 }
+
+  requestBodies:
+    Credentials:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [username, password]
+            properties:
+              username: { type: string }
+              password: { type: string }
+    TargetUser:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [targetUserId]
+            properties:
+              targetUserId: { type: integer }
+
+  responses:
+    Success:
+      description: Success envelope
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Envelope" }
+    AuthSuccess:
+      description: Authenticated — token included
+      content:
+        application/json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Envelope"
+              - type: object
+                properties:
+                  token: { type: string }
+    BadRequest:
+      description: Validation error
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing/invalid token or credentials
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Insufficient privileges
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Record not found (or archived, on default queries)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Conflict:
+      description: State conflict (duplicate, dependency, already archived…)
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Envelope:
+      type: object
+      properties:
+        status: { type: string, enum: [success] }
+        message: { type: string }
+        data:
+          description: Entity or array of entities (or null); shape depends on the endpoint
+    Error:
+      type: object
+      properties:
+        status: { type: string, enum: [fail, error] }
+        message: { type: string }
+    Archivable:
+      type: object
+      description: Mixin present on all archivable entities
+      properties:
+        archived_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: null = live; set = archived
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+          description: null on rows predating timestamping (PR #59)
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+    FormatInput:
+      type: object
+      required: [name, code, teams_per_room, speakers_per_team, score_min, score_max]
+      properties:
+        name: { type: string }
+        code: { type: string, maxLength: 10 }
+        teams_per_room: { type: integer }
+        speakers_per_team: { type: integer }
+        has_reply: { type: boolean, default: false }
+        score_min: { type: integer }
+        score_max: { type: integer }

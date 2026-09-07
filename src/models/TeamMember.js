@@ -8,7 +8,12 @@ module.exports = (sequelize) => {
       team_id: { type: DataTypes.INTEGER, allowNull: false },
       participant_id: { type: DataTypes.INTEGER, allowNull: false },
     },
-    { tableName: "team_members" },
+    {
+      tableName: "team_members",
+      timestamps: true,
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+    },
   );
 
   TeamMember.associate = (models) => {

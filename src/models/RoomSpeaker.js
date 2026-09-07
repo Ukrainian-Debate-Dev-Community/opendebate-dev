@@ -9,7 +9,12 @@ module.exports = (sequelize) => {
       participant_id: { type: DataTypes.INTEGER, allowNull: false },
       rank: { type: DataTypes.SMALLINT, allowNull: true }, // team-position
     },
-    { tableName: "room_speakers" },
+    {
+      tableName: "room_speakers",
+      timestamps: true,
+      createdAt: "created_at",
+      updatedAt: "updated_at",
+    },
   );
 
   RoomSpeaker.associate = (models) => {
