@@ -190,6 +190,77 @@ const updateEliminations = async (req, res, next) => {
   }
 };
 
+// per-participant toggle — organisers can check anyone in;
+// a participant linked to the calling user can check themselves in.
+const updateCheckIn = async (req, res, next) => {
+  try {
+    const { eventId, participantId } = req.params;
+    const { checked_in } = req.body;
+
+    if (typeof checked_in !== "boolean") {
+      throw new AppError("A boolean 'checked_in' field is required.", 400);
+    }
+
+    const participant = await EventParticipant.findOne({
+      where: { id: participantId, event_id: eventId },
+    });
+    if (!participant)
+      throw new AppError("Participant not found in this event.", 404);
+
+    const isPrivileged = await hasEventPrivilege(
+      req.user.id,
+      req.user.isAdmin,
+      Number(eventId),
+    );
+    const isSelf = participant.user_id === req.user.id;
+
+    if (!isPrivileged && !isSelf) {
+      throw new AppError(
+        "Unauthorised: Only Organisers or the participant themselves can update check-in.",
+        403,
+      );
+    }
+
+    participant.checked_in = checked_in;
+    await participant.save();
+
+    res.status(200).json({ status: "success", data: participant });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// bulk check-in — mirrors the eliminations endpoint shape
+const updateCheckIns = async (req, res, next) => {
+  try {
+    const { eventId } = req.params;
+    const { status, participant_ids } = req.body;
+
+    if (typeof status !== "boolean") {
+      throw new AppError("A boolean 'status' field is required.", 400);
+    }
+
+    if (!Array.isArray(participant_ids) || participant_ids.length === 0) {
+      throw new AppError(
+        "Please provide at least one participant_id to update.",
+        400,
+      );
+    }
+
+    await EventParticipant.update(
+      { checked_in: status },
+      { where: { id: participant_ids, event_id: eventId } },
+    );
+
+    res.status(200).json({
+      status: "success",
+      message: `Check-in status successfully set to ${status}.`,
+    });
+  } catch (error) {
+    next(error);
+  }
+};
+
 const removeParticipant = async (req, res, next) => {
   try {
     const { participantId } = req.params;
@@ -300,6 +371,8 @@ module.exports = {
   getEventParticipants,
   updateParticipant,
   updateEliminations,
+  updateCheckIn,
+  updateCheckIns,
   removeParticipant,
   restoreParticipant,
   claimIdentity,
