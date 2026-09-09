@@ -18,8 +18,9 @@ const getTeamStandings = async (req, res, next) => {
       Number(eventId),
     );
 
+    // swing teams occupy room slots but never appear in standings
     const teams = await Team.findAll({
-      where: { event_id: eventId },
+      where: { event_id: eventId, is_swing: false },
       attributes: ["id", "name"],
     });
 
@@ -142,8 +143,9 @@ const getCalculatedTeamStandings = async (req, res, next) => {
       Number(eventId),
     );
 
+    // swing teams still count toward room sizes below, but earn no standings
     const teams = await Team.findAll({
-      where: { event_id: eventId },
+      where: { event_id: eventId, is_swing: false },
       attributes: ["id", "name"],
     });
 
