@@ -28,10 +28,10 @@
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
     "express": "^5.2.1",
-    "express-rate-limit": "^8.5.2",
+    "express-rate-limit": "^8.7.0",
     "helmet": "^8.1.0",
     "jsonwebtoken": "^9.0.3",
-    "pg": "^8.13.3",
+    "pg": "^8.23.0",
     "pg-hstore": "^2.3.4",
     "sequelize": "^6.37.8",
     "sequelize-cli": "^6.6.5"
