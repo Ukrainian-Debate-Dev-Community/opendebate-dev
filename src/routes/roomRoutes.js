@@ -17,6 +17,8 @@ router.post("/:roomId/feedback", feedbackController.submitFeedback);
 router.delete("/:roomId", restrictToOwnOrg, roomController.deleteRoom);
 router.patch("/:roomId/restore", restrictToOwnOrg, roomController.restoreRoom);
 router.post("/:roomId/scores", restrictToChair, scoreController.submitScores);
+// judge sets this room's motion (chair; owner/organiser fall-through)
+router.post("/:roomId/motion", restrictToChair, roomController.setRoomMotion);
 router.patch("/:roomId/confirm", restrictToOwnOrg, scoreController.confirmRoom);
 router.patch(
   "/:roomId/unconfirm",
