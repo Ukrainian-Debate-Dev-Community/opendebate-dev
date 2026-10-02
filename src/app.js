@@ -1,7 +1,6 @@
 const express = require("express");
 const cors = require("cors");
 const helmet = require("helmet");
-const rateLimit = require("express-rate-limit");
 require("dotenv").config();
 
 const { sequelize } = require("./models");
@@ -9,6 +8,7 @@ const apiRoutes = require("./routes/main");
 
 const AppError = require("./utils/AppError");
 const errorHandler = require("./middleware/errorHandler");
+const { apiLimiter } = require("./middleware/rateLimiter");
 
 // fail-fast on missing/weak JWT_SECRET so tokens are never signed with `undefined`
 if (!process.env.JWT_SECRET || process.env.JWT_SECRET.length < 32) {
@@ -19,18 +19,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.set("trust proxy", 1);
-
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 200, // 200 requests per window
-  message: {
-    status: "fail",
-    message:
-      "Too many requests from this IP, please try again after 15 minutes.",
-  },
-  standardHeaders: true, // return rate limit info in the `RateLimit-*` headers
-  legacyHeaders: false, // disable the `X-RateLimit-*` headers
-});
 
 // CORS allowlist from env (comma-separated). Empty/missing → no cross-origin browser access.
 const corsOrigins = (process.env.CORS_ORIGINS || "")
