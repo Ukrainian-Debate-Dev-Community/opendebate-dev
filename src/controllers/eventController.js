@@ -1,4 +1,5 @@
-const { Event } = require("../models");
+const { Op } = require("sequelize");
+const { Event, Organisation } = require("../models");
 const AppError = require("../utils/AppError");
 const { paginate } = require("../utils/pagination");
 const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
@@ -37,6 +38,57 @@ const createEvent = async (req, res, next) => {
     });
 
     res.status(201).json({ status: "success", data: newEvent });
+  } catch (error) {
+    next(error);
+  }
+};
+
+// unauthenticated listing — opt-in ?limit/?page pagination like every
+// other list endpoint (omitting limit returns the complete list)
+const listPublicEvents = async (req, res, next) => {
+  try {
+    const { status, from, to } = req.query;
+
+    if (status && !["scheduled", "in_progress", "completed"].includes(status)) {
+      throw new AppError("Invalid status state.", 400);
+    }
+
+    const where = {};
+    if (status) where.status = status;
+
+    const startDateRange = {};
+    if (from) {
+      const fromDate = new Date(from);
+      if (isNaN(fromDate.getTime())) {
+        throw new AppError("Invalid from date.", 400);
+      }
+      startDateRange[Op.gte] = fromDate;
+    }
+    if (to) {
+      const toDate = new Date(to);
+      if (isNaN(toDate.getTime())) {
+        throw new AppError("Invalid to date.", 400);
+      }
+      startDateRange[Op.lte] = toDate;
+    }
+    if (from || to) where.start_date = startDateRange;
+
+    const events = await Event.findAll({
+      where,
+      attributes: [
+        "id",
+        "name",
+        "start_date",
+        "end_date",
+        "status",
+        "is_ranked",
+      ],
+      include: [{ model: Organisation, attributes: ["id", "name"] }],
+      order: [["id", "ASC"]],
+      ...paginate(req.query),
+    });
+
+    res.status(200).json({ status: "success", data: events });
   } catch (error) {
     next(error);
   }
@@ -122,6 +174,7 @@ const restoreEvent = async (req, res, next) => {
 module.exports = {
   checkEventAccess,
   createEvent,
+  listPublicEvents,
   getOrganisationEvents,
   getEventById,
   updateEvent,

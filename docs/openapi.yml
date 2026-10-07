@@ -342,6 +342,31 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
 
   # ────────────────────────── events ──────────────────────────
+  /events:
+    get:
+      tags: [events]
+      summary: Public event listing (no auth)
+      security: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [scheduled, in_progress, completed]
+        - name: from
+          in: query
+          description: "Only events with start_date on or after this ISO date"
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          description: "Only events with start_date on or before this ISO date"
+          schema: { type: string, format: date }
+        - $ref: "#/components/parameters/listPage"
+        - $ref: "#/components/parameters/listLimit"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
   /events/organisation/{organisationId}:
     get:
       tags: [events]
