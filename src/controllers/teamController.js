@@ -18,7 +18,12 @@ const createTeam = async (req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
     const eventId = req.params.eventId;
-    const { name, participant_ids, is_temporary = false } = req.body;
+    const {
+      name,
+      participant_ids,
+      is_temporary = false,
+      is_swing = false,
+    } = req.body;
     // participant_ids expects an array [first_id, second_id ... ], could be duplicates (iron-person)
 
     if (
@@ -77,7 +82,13 @@ const createTeam = async (req, res, next) => {
     }
 
     const newTeam = await Team.create(
-      { event_id: eventId, name, is_temporary, is_eliminated: false },
+      {
+        event_id: eventId,
+        name,
+        is_temporary,
+        is_swing: is_swing === true,
+        is_eliminated: false,
+      },
       { transaction },
     );
 
@@ -110,11 +121,19 @@ const generateRandomTeams = async (req, res, next) => {
     if (!format) throw new AppError("Format not found.", 404);
 
     // fetch all active speakers (not eliminated)
-    const allSpeakers = await EventParticipant.findAll({
+    let allSpeakers = await EventParticipant.findAll({
       where: { event_id: eventId, role: "speaker", is_eliminated: false },
-      attributes: ["id", "display_name"],
+      attributes: ["id", "display_name", "checked_in"],
       raw: true,
     });
+
+    // attendance-aware generation: once check-in is in use for this event,
+    // only checked-in speakers are drafted. If nobody has checked in the
+    // feature is considered unused and all active speakers remain eligible.
+    const anyCheckedIn = allSpeakers.some((s) => s.checked_in);
+    if (anyCheckedIn) {
+      allSpeakers = allSpeakers.filter((s) => s.checked_in);
+    }
 
     // fetch speakers already locked into Permanent Teams
     const permanentMembers = await TeamMember.findAll({
@@ -194,6 +213,7 @@ const getEventTeams = async (req, res, next) => {
       id: team.id,
       name: team.name,
       is_temporary: team.is_temporary,
+      is_swing: team.is_swing,
       is_eliminated: team.is_eliminated,
       speakers: team.TeamMembers.map((member) => ({
         participant_id: member.EventParticipant.id,
@@ -213,7 +233,7 @@ const updateTeam = async (req, res, next) => {
   try {
     const teamId = req.params.teamId;
     const eventId = req.params.eventId;
-    const { name, participant_ids } = req.body;
+    const { name, participant_ids, is_swing } = req.body;
 
     const team = await Team.findOne({
       where: { id: teamId, event_id: eventId },
@@ -226,6 +246,7 @@ const updateTeam = async (req, res, next) => {
     const isTemporary = team.is_temporary;
 
     if (name) team.name = name;
+    if (is_swing !== undefined) team.is_swing = is_swing === true;
 
     if (participant_ids && Array.isArray(participant_ids)) {
       const uniqueParticipantIds = [...new Set(participant_ids)];

@@ -165,6 +165,23 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /admins/anonymise:
+    post:
+      tags: [admins]
+      summary: Anonymise a user account, preserving historical results (Admin only)
+      description: >
+        Replaces the username with `deleted_user_<id>`, randomises the
+        password, sets `is_deleted` and scrubs the display name of every
+        linked event participant. Rooms, scores and standings stay intact.
+        Unlike self-service account deletion this never hard-deletes the row.
+      requestBody:
+        $ref: "#/components/requestBodies/TargetUser"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
   # ────────────────────────── organisations ──────────────────────────
   /organisations:
     get:
@@ -325,6 +342,31 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
 
   # ────────────────────────── events ──────────────────────────
+  /events:
+    get:
+      tags: [events]
+      summary: Public event listing (no auth)
+      security: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [scheduled, in_progress, completed]
+        - name: from
+          in: query
+          description: "Only events with start_date on or after this ISO date"
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          description: "Only events with start_date on or before this ISO date"
+          schema: { type: string, format: date }
+        - $ref: "#/components/parameters/listPage"
+        - $ref: "#/components/parameters/listLimit"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
   /events/organisation/{organisationId}:
     get:
       tags: [events]
@@ -456,6 +498,30 @@ paths:
         "200": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }
 
+  /events/{eventId}/check-ins:
+    patch:
+      tags: [events]
+      summary: Bulk (un)check-in participants (Owner/Organizer)
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, participant_ids]
+              properties:
+                status:
+                  type: boolean
+                  description: true = checked in, false = not checked in
+                participant_ids:
+                  type: array
+                  items: { type: integer }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
   # ─── rounds (event-scoped) ───
   /events/{eventId}/rounds:
     parameters:
@@ -561,6 +627,10 @@ paths:
                   items: { type: integer }
                   description: Duplicates allowed (iron-person)
                 is_temporary: { type: boolean, default: false }
+                is_swing:
+                  type: boolean
+                  default: false
+                  description: Swing teams fill empty slots and are excluded from team standings
       responses:
         "201": { $ref: "#/components/responses/Success" }
         "409":
@@ -573,6 +643,10 @@ paths:
     get:
       tags: [teams]
       summary: Propose random teams from unassigned speakers (Owner/Organizer)
+      description: >
+        Attendance-aware — once at least one speaker of the event is checked
+        in, only checked-in speakers are drafted; with no check-ins recorded
+        every active speaker remains eligible.
       parameters:
         - $ref: "#/components/parameters/eventId"
         - name: format_id
@@ -689,6 +763,28 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "409": { $ref: "#/components/responses/Conflict" }
+
+  /events/{eventId}/participants/{participantId}/check-in:
+    patch:
+      tags: [participants]
+      summary: Toggle a participant's check-in (Owner/Organizer, or the participant themselves)
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+        - $ref: "#/components/parameters/participantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [checked_in]
+              properties:
+                checked_in: { type: boolean }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /events/{eventId}/participants/{participantId}/restore:
     patch:

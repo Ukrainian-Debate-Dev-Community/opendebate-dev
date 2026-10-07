@@ -14,6 +14,7 @@ module.exports = (sequelize) => {
         validate: { isIn: [["speaker", "adjudicator"]] },
       },
       is_eliminated: { type: DataTypes.BOOLEAN, defaultValue: false },
+      checked_in: { type: DataTypes.BOOLEAN, defaultValue: false },
       claim_token_hash: { type: DataTypes.STRING(255), allowNull: true },
       claim_token_used_at: { type: DataTypes.DATE, allowNull: true },
     },
