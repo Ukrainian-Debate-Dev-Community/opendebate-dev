@@ -165,6 +165,23 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /admins/anonymise:
+    post:
+      tags: [admins]
+      summary: Anonymise a user account, preserving historical results (Admin only)
+      description: >
+        Replaces the username with `deleted_user_<id>`, randomises the
+        password, sets `is_deleted` and scrubs the display name of every
+        linked event participant. Rooms, scores and standings stay intact.
+        Unlike self-service account deletion this never hard-deletes the row.
+      requestBody:
+        $ref: "#/components/requestBodies/TargetUser"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
   # ────────────────────────── organisations ──────────────────────────
   /organisations:
     get:
