@@ -9,6 +9,8 @@ module.exports = (sequelize) => {
       name: { type: DataTypes.STRING(120), allowNull: false },
       is_temporary: { type: DataTypes.BOOLEAN, defaultValue: false },
       is_eliminated: { type: DataTypes.BOOLEAN, defaultValue: false },
+      // swing teams fill empty slots; their results never count toward standings
+      is_swing: { type: DataTypes.BOOLEAN, defaultValue: false },
     },
     {
       tableName: "teams",
