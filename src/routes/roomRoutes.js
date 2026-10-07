@@ -17,6 +17,11 @@ router.post("/:roomId/feedback", feedbackController.submitFeedback);
 router.delete("/:roomId", restrictToOwnOrg, roomController.deleteRoom);
 router.patch("/:roomId/restore", restrictToOwnOrg, roomController.restoreRoom);
 router.post("/:roomId/scores", restrictToChair, scoreController.submitScores);
-router.patch("/:roomId/reopen", restrictToOwnOrg, scoreController.reopenRoom);
+router.patch("/:roomId/confirm", restrictToOwnOrg, scoreController.confirmRoom);
+router.patch(
+  "/:roomId/unconfirm",
+  restrictToOwnOrg,
+  scoreController.unconfirmRoom,
+);
 
 module.exports = router;

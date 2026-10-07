@@ -280,7 +280,9 @@ const updateTeam = async (req, res, next) => {
         const room = await Room.findByPk(rt.room_id, { transaction });
         if (
           room &&
-          (room.status === "judging" || room.status === "completed")
+          (room.status === "judging" ||
+            room.status === "completed" ||
+            room.status === "confirmed")
         ) {
           throw new AppError(
             "Cannot modify team roster. This team is in a room that is currently being judged or is already completed.",

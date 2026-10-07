@@ -423,7 +423,11 @@ const deleteRoom = async (req, res, next) => {
 
     if (!room) throw new AppError("Room not found.", 404);
 
-    if (room.status === "judging" || room.status === "completed") {
+    if (
+      room.status === "judging" ||
+      room.status === "completed" ||
+      room.status === "confirmed"
+    ) {
       throw new AppError(
         `Cannot delete a room in '${room.status}' state. Void or reset it first.`,
         409,
