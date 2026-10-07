@@ -5,6 +5,7 @@ const roundController = require("../controllers/roundController");
 const feedbackController = require("../controllers/feedbackController");
 const teamController = require("../controllers/teamController");
 const standingsController = require("../controllers/standingsController");
+const statsController = require("../controllers/statsController");
 const eventParticipantController = require("../controllers/eventParticipantController");
 const {
   verifyToken,
@@ -68,6 +69,11 @@ router.get(
   "/:eventId/standings/calculated/speakers",
   standingsController.getCalculatedSpeakerStandings,
 );
+
+// statistics (read-auth like standings)
+router.get("/:eventId/stats/speakers", statsController.getSpeakerStats);
+router.get("/:eventId/stats/teams", statsController.getTeamStats);
+router.get("/:eventId/stats/judges", statsController.getJudgeStats);
 
 // teams
 router.get("/:eventId/teams", teamController.getEventTeams);
