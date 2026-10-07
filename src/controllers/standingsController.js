@@ -9,6 +9,17 @@ const {
 } = require("../models");
 const { hasEventPrivilege } = require("../middleware/authMiddleware");
 
+// Swing teams occupy slots and hold ranks (so they still count toward a
+// room's N), but performances delivered in a swing slot are excluded from
+// speaker standings, mirroring their exclusion from team standings.
+const getSwingTeamIds = async (eventId) => {
+  const swings = await Team.findAll({
+    where: { event_id: eventId, is_swing: true },
+    attributes: ["id"],
+  });
+  return new Set(swings.map((t) => t.id));
+};
+
 const getTeamStandings = async (req, res, next) => {
   try {
     const { eventId } = req.params;
@@ -97,13 +108,18 @@ const getSpeakerStandings = async (req, res, next) => {
 
     const roomTeams = await RoomTeam.findAll({
       where: { room_id: roomIds },
-      attributes: ["id", "room_id"],
+      attributes: ["id", "room_id", "team_id"],
     });
     const roomTeamIds = roomTeams.map((rt) => rt.id);
 
+    const swingTeamIds = await getSwingTeamIds(eventId);
     const rtToRoom = {};
+    const swingRoomTeamIds = new Set();
     roomTeams.forEach((rt) => {
       rtToRoom[rt.id] = rt.room_id;
+      if (swingTeamIds.has(rt.team_id)) {
+        swingRoomTeamIds.add(rt.id);
+      }
     });
 
     const roomSpeakers = await RoomSpeaker.findAll({
@@ -117,6 +133,9 @@ const getSpeakerStandings = async (req, res, next) => {
     });
 
     roomSpeakers.forEach((rs) => {
+      if (swingRoomTeamIds.has(rs.room_team_id)) {
+        return; // swing slot: performance excluded from speaker standings
+      }
       if (standings[rs.participant_id] && rs.rank !== null) {
         const roomId = rtToRoom[rs.room_team_id];
         standings[rs.participant_id].rooms[roomId] = rs.rank;
@@ -228,15 +247,22 @@ const getCalculatedSpeakerStandings = async (req, res, next) => {
 
     const roomTeams = await RoomTeam.findAll({
       where: { room_id: roomIds },
-      attributes: ["id", "room_id", "rank"],
+      attributes: ["id", "room_id", "rank", "team_id"],
     });
 
+    // swing teams still count toward a room's N (they held a slot and a
+    // rank), but their speakers' scores are skipped below
+    const swingTeamIds = await getSwingTeamIds(eventId);
+    const swingRoomTeamIds = new Set();
     const roomSizes = Object.create(null);
     const rtToData = Object.create(null);
 
     roomTeams.forEach((rt) => {
       roomSizes[rt.room_id] = (roomSizes[rt.room_id] || 0) + 1;
       rtToData[rt.id] = { roomId: rt.room_id, rank: rt.rank };
+      if (swingTeamIds.has(rt.team_id)) {
+        swingRoomTeamIds.add(rt.id);
+      }
     });
 
     const roomTeamIds = roomTeams.map((rt) => rt.id);
@@ -253,6 +279,9 @@ const getCalculatedSpeakerStandings = async (req, res, next) => {
     });
 
     roomSpeakers.forEach((rs) => {
+      if (swingRoomTeamIds.has(rs.room_team_id)) {
+        return; // swing slot: performance excluded from speaker standings
+      }
       if (standings[rs.participant_id] && rs.Scores && rs.Scores.length > 0) {
         const teamData = rtToData[rs.room_team_id];
 
