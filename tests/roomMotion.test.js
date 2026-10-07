@@ -190,4 +190,31 @@ describe("Per-room motions (judge sets the motion of their room)", () => {
       "THW let judges set motions",
     );
   });
+
+  it("stores the keyword when the judge sets the motion", async () => {
+    const res = await request(app)
+      .post(`/api/rooms/${chairedRoomId}/motion`)
+      .set("Authorization", `Bearer ${chairToken}`)
+      .send({ motion_text: "THW tag motions", keyword: "tagging" });
+
+    expect(res.statusCode).toBe(201);
+    expect(res.body.data.motion.keyword).toBe("tagging");
+
+    const motion = await Motion.findByPk(res.body.data.motion.id);
+    expect(motion.keyword).toBe("tagging");
+  });
+
+  it("defaults the keyword to null and returns it in the rooms listing", async () => {
+    const res = await request(app)
+      .get(`/api/rounds/${roundId}/rooms`)
+      .set("Authorization", `Bearer ${ownerToken}`);
+
+    expect(res.statusCode).toBe(200);
+
+    const tagged = res.body.data.find((r) => r.id === chairedRoomId);
+    expect(tagged.Motion.keyword).toBe("tagging");
+
+    const untagged = res.body.data.find((r) => r.id === otherRoomId);
+    expect(untagged.Motion.keyword).toBeNull();
+  });
 });

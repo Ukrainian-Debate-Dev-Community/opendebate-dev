@@ -376,7 +376,7 @@ const createRoom = async (req, res, next) => {
 const setRoomMotion = async (req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
-    const { motion_text, infoslide } = req.body;
+    const { motion_text, infoslide, keyword } = req.body;
     if (!motion_text) {
       throw new AppError("Please provide the motion_text.", 400);
     }
@@ -401,6 +401,7 @@ const setRoomMotion = async (req, res, next) => {
         event_id: room.Round.event_id,
         motion_text,
         infoslide: infoslide || null,
+        keyword: keyword || null,
         is_released: true,
       },
       { transaction },
@@ -430,7 +431,7 @@ const getRoundRooms = async (req, res, next) => {
         { model: Format, attributes: ["name", "code"], paranoid: false },
         {
           model: Motion,
-          attributes: ["id", "motion_text", "infoslide", "is_released"],
+          attributes: ["id", "motion_text", "infoslide", "keyword", "is_released"],
           paranoid: false,
         },
         {

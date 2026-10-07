@@ -7,7 +7,7 @@ const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 const createMotion = async (req, res, next) => {
   try {
     const eventId = req.params.eventId;
-    const { motion_text, infoslide, is_released } = req.body;
+    const { motion_text, infoslide, keyword, is_released } = req.body;
 
     if (!motion_text)
       throw new AppError("Please provide the motion_text.", 400);
@@ -23,6 +23,7 @@ const createMotion = async (req, res, next) => {
       event_id: eventId,
       motion_text,
       infoslide: infoslide || null,
+      keyword: keyword || null,
       is_released: is_released || false,
     });
 
@@ -62,6 +63,7 @@ const getMotions = async (req, res, next) => {
         event_id: motion.event_id,
         motion_text: "Motion will be revealed later.",
         infoslide: null,
+        keyword: null,
         is_released: false,
       };
     });
@@ -107,7 +109,7 @@ const getMotionById = async (req, res, next) => {
 const updateMotion = async (req, res, next) => {
   try {
     const { motionId } = req.params;
-    const { motion_text, infoslide, is_released } = req.body;
+    const { motion_text, infoslide, keyword, is_released } = req.body;
 
     const motion = await Motion.findOne({
       where: { id: motionId, event_id: req.params.eventId },
@@ -116,6 +118,7 @@ const updateMotion = async (req, res, next) => {
 
     motion.motion_text = motion_text || motion.motion_text;
     motion.infoslide = infoslide !== undefined ? infoslide : motion.infoslide;
+    motion.keyword = keyword !== undefined ? keyword : motion.keyword;
     if (is_released !== undefined) motion.is_released = is_released;
 
     await motion.save();
