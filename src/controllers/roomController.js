@@ -366,6 +366,61 @@ const createRoom = async (req, res, next) => {
   }
 };
 
+// judge action (chair, with the usual owner/organiser fall-through):
+// set THIS room's motion. Motions stay event-scoped rows; the room
+// points at its own motion, so different rooms of one round can
+// debate different motions (club sessions). Created released — the
+// judge announces it to the room. Rooms are action-based, so this is
+// a dedicated action next to /scores and /confirm rather than a
+// generic room update.
+const setRoomMotion = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+  try {
+    const { motion_text, infoslide, keyword } = req.body;
+    if (!motion_text) {
+      throw new AppError("Please provide the motion_text.", 400);
+    }
+
+    const room = await Room.findByPk(req.params.roomId, {
+      include: [{ model: Round }],
+      lock: { level: transaction.LOCK.UPDATE, of: Room },
+      transaction,
+    });
+    if (!room) throw new AppError("Room not found.", 404);
+
+    if (room.status !== "pending" && room.status !== "judging") {
+      throw new AppError(
+        `Cannot set the motion of a room that is '${room.status}'. ` +
+          "Motions are settable only while the room is pending or judging.",
+        409,
+      );
+    }
+
+    const motion = await Motion.create(
+      {
+        event_id: room.Round.event_id,
+        motion_text,
+        infoslide: infoslide || null,
+        keyword: keyword || null,
+        is_released: true,
+      },
+      { transaction },
+    );
+
+    room.motion_id = motion.id;
+    await room.save({ transaction });
+
+    await transaction.commit();
+    res.status(201).json({
+      status: "success",
+      data: { motion, room_id: room.id },
+    });
+  } catch (error) {
+    await transaction.rollback();
+    next(error);
+  }
+};
+
 const getRoundRooms = async (req, res, next) => {
   try {
     const roundId = req.params.roundId;
@@ -374,6 +429,11 @@ const getRoundRooms = async (req, res, next) => {
       where: { round_id: roundId },
       include: [
         { model: Format, attributes: ["name", "code"], paranoid: false },
+        {
+          model: Motion,
+          attributes: ["id", "motion_text", "infoslide", "keyword", "is_released"],
+          paranoid: false,
+        },
         {
           model: RoomAdjudicator,
           attributes: ["id", "role"],
@@ -494,4 +554,10 @@ const restoreRoom = async (req, res, next) => {
   }
 };
 
-module.exports = { createRoom, getRoundRooms, deleteRoom, restoreRoom };
+module.exports = {
+  createRoom,
+  getRoundRooms,
+  setRoomMotion,
+  deleteRoom,
+  restoreRoom,
+};

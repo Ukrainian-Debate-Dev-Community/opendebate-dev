@@ -909,6 +909,7 @@ paths:
               properties:
                 motion_text: { type: string }
                 infoslide: { type: string, nullable: true }
+                keyword: { type: string, nullable: true, maxLength: 120 }
                 is_released: { type: boolean, default: false }
       responses:
         "201": { $ref: "#/components/responses/Success" }
@@ -936,6 +937,7 @@ paths:
               properties:
                 motion_text: { type: string }
                 infoslide: { type: string, nullable: true }
+                keyword: { type: string, nullable: true, maxLength: 120 }
                 is_released: { type: boolean }
       responses:
         "200": { $ref: "#/components/responses/Success" }
@@ -1130,6 +1132,35 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /rooms/{roomId}/motion:
+    post:
+      tags: [rooms]
+      summary: Judge sets this room's motion (Chair; Owner/Organizer fall-through)
+      description: >
+        Creates a released event motion and attaches it to the room in one
+        transaction, while the room is `pending` or `judging`. Rooms carry
+        their own motion_id, so rooms of one round can debate different
+        motions (club sessions).
+      parameters:
+        - $ref: "#/components/parameters/roomId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motion_text]
+              properties:
+                motion_text: { type: string }
+                infoslide: { type: string, nullable: true }
+                keyword: { type: string, nullable: true, maxLength: 120 }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /rooms/{roomId}/confirm:
