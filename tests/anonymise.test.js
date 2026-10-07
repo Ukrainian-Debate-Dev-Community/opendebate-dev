@@ -113,6 +113,50 @@ describe("Admin User Anonymisation", () => {
     await sequelize.close();
   });
 
+  describe("DELETE /api/users (self) - anonymising fallback", () => {
+    it("scrubs participant display names when history blocks hard delete", async () => {
+      // its own user with history, so the FK fallback path runs
+      const selfUser = await User.create({
+        username: "self_deleter",
+        password: "hashedpassword123",
+      });
+      const selfToken = jwt.sign(
+        { id: selfUser.id, isAdmin: false },
+        process.env.JWT_SECRET || "testsecret",
+        { expiresIn: "1h" },
+      );
+      const org2 = await Organisation.create({ name: "Self Org" });
+      const event2 = await Event.create({
+        organisation_id: org2.id,
+        name: "Self Event",
+        status: "completed",
+      });
+      const selfParticipant = await EventParticipant.create({
+        event_id: event2.id,
+        user_id: selfUser.id,
+        display_name: "Self Real Name",
+        role: "speaker",
+      });
+
+      const res = await request(app)
+        .delete(`/api/users`)
+        .set("Authorization", `Bearer ${selfToken}`);
+
+      // participant-only users hard-delete (their FK is SET NULL), but
+      // the display name must be scrubbed regardless
+      expect(res.statusCode).toEqual(204);
+
+      const freshUser = await User.findByPk(selfUser.id);
+      expect(freshUser).toBeNull();
+
+      const freshParticipant = await EventParticipant.findByPk(
+        selfParticipant.id,
+      );
+      expect(freshParticipant.display_name).toMatch(/^deleted_user_/);
+      expect(freshParticipant.user_id).toBeNull();
+    });
+  });
+
   describe("POST /api/admins/anonymise", () => {
     it("should return 403 for a non-admin caller", async () => {
       const res = await request(app)

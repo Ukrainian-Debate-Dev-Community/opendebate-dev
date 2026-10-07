@@ -121,11 +121,19 @@ const generateRandomTeams = async (req, res, next) => {
     if (!format) throw new AppError("Format not found.", 404);
 
     // fetch all active speakers (not eliminated)
-    const allSpeakers = await EventParticipant.findAll({
+    let allSpeakers = await EventParticipant.findAll({
       where: { event_id: eventId, role: "speaker", is_eliminated: false },
-      attributes: ["id", "display_name"],
+      attributes: ["id", "display_name", "checked_in"],
       raw: true,
     });
+
+    // attendance-aware generation: once check-in is in use for this event,
+    // only checked-in speakers are drafted. If nobody has checked in the
+    // feature is considered unused and all active speakers remain eligible.
+    const anyCheckedIn = allSpeakers.some((s) => s.checked_in);
+    if (anyCheckedIn) {
+      allSpeakers = allSpeakers.filter((s) => s.checked_in);
+    }
 
     // fetch speakers already locked into Permanent Teams
     const permanentMembers = await TeamMember.findAll({

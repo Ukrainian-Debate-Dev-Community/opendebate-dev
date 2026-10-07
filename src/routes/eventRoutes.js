@@ -55,6 +55,13 @@ router.patch(
   eventParticipantController.updateEliminations,
 );
 
+// bulk check-in (participants)
+router.patch(
+  "/:eventId/check-ins",
+  restrictToOwnOrg,
+  eventParticipantController.updateCheckIns,
+);
+
 // get speaker/team standings
 router.get("/:eventId/standings/teams", standingsController.getTeamStandings);
 router.get(
