@@ -165,6 +165,23 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /admins/anonymise:
+    post:
+      tags: [admins]
+      summary: Anonymise a user account, preserving historical results (Admin only)
+      description: >
+        Replaces the username with `deleted_user_<id>`, randomises the
+        password, sets `is_deleted` and scrubs the display name of every
+        linked event participant. Rooms, scores and standings stay intact.
+        Unlike self-service account deletion this never hard-deletes the row.
+      requestBody:
+        $ref: "#/components/requestBodies/TargetUser"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
   # ────────────────────────── organisations ──────────────────────────
   /organisations:
     get:
@@ -340,6 +357,31 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
 
   # ────────────────────────── events ──────────────────────────
+  /events:
+    get:
+      tags: [events]
+      summary: Public event listing (no auth)
+      security: []
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [scheduled, in_progress, completed]
+        - name: from
+          in: query
+          description: "Only events with start_date on or after this ISO date"
+          schema: { type: string, format: date }
+        - name: to
+          in: query
+          description: "Only events with start_date on or before this ISO date"
+          schema: { type: string, format: date }
+        - $ref: "#/components/parameters/listPage"
+        - $ref: "#/components/parameters/listLimit"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
   /events/organisation/{organisationId}:
     get:
       tags: [events]
@@ -464,6 +506,30 @@ paths:
                 team_ids:
                   type: array
                   items: { type: integer }
+                participant_ids:
+                  type: array
+                  items: { type: integer }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /events/{eventId}/check-ins:
+    patch:
+      tags: [events]
+      summary: Bulk (un)check-in participants (Owner/Organizer)
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [status, participant_ids]
+              properties:
+                status:
+                  type: boolean
+                  description: true = checked in, false = not checked in
                 participant_ids:
                   type: array
                   items: { type: integer }
@@ -623,6 +689,10 @@ paths:
                   items: { type: integer }
                   description: Duplicates allowed (iron-person)
                 is_temporary: { type: boolean, default: false }
+                is_swing:
+                  type: boolean
+                  default: false
+                  description: Swing teams fill empty slots and are excluded from team standings
       responses:
         "201": { $ref: "#/components/responses/Success" }
         "409":
@@ -635,6 +705,10 @@ paths:
     get:
       tags: [teams]
       summary: Propose random teams from unassigned speakers (Owner/Organizer)
+      description: >
+        Attendance-aware — once at least one speaker of the event is checked
+        in, only checked-in speakers are drafted; with no check-ins recorded
+        every active speaker remains eligible.
       parameters:
         - $ref: "#/components/parameters/eventId"
         - name: format_id
@@ -751,6 +825,28 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "409": { $ref: "#/components/responses/Conflict" }
+
+  /events/{eventId}/participants/{participantId}/check-in:
+    patch:
+      tags: [participants]
+      summary: Toggle a participant's check-in (Owner/Organizer, or the participant themselves)
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+        - $ref: "#/components/parameters/participantId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [checked_in]
+              properties:
+                checked_in: { type: boolean }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /events/{eventId}/participants/{participantId}/restore:
     patch:
@@ -875,6 +971,7 @@ paths:
               properties:
                 motion_text: { type: string }
                 infoslide: { type: string, nullable: true }
+                keyword: { type: string, nullable: true, maxLength: 120 }
                 is_released: { type: boolean, default: false }
       responses:
         "201": { $ref: "#/components/responses/Success" }
@@ -902,6 +999,7 @@ paths:
               properties:
                 motion_text: { type: string }
                 infoslide: { type: string, nullable: true }
+                keyword: { type: string, nullable: true, maxLength: 120 }
                 is_released: { type: boolean }
       responses:
         "200": { $ref: "#/components/responses/Success" }
@@ -1039,7 +1137,7 @@ paths:
   /rooms/{roomId}:
     delete:
       tags: [rooms]
-      summary: Archive a room and its temporary teams — blocked while judging/completed (Owner/Organizer; ?hard=true Admin)
+      summary: Archive a room and its temporary teams — blocked while judging/completed/confirmed (Owner/Organizer; ?hard=true Admin)
       parameters:
         - $ref: "#/components/parameters/roomId"
         - $ref: "#/components/parameters/hard"
@@ -1060,11 +1158,13 @@ paths:
   /rooms/{roomId}/scores:
     post:
       tags: [scoring]
-      summary: Submit the room ballot (Chair or Admin) — locks the room
+      summary: Submit or resubmit the room ballot (Chair or Admin)
       description: >
         Team ranks must be a permutation of 1..teams_per_room; speaker scores
         must cover every room speaker and respect the format's score bounds.
-        On success the room status becomes `completed`.
+        On success the room status becomes `completed`. A `completed` room
+        accepts resubmission as an atomic replace of the previous ballot;
+        `confirmed` and `void` rooms reject submission.
       parameters:
         - $ref: "#/components/parameters/roomId"
       requestBody:
@@ -1096,11 +1196,52 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "409": { $ref: "#/components/responses/Conflict" }
 
-  /rooms/{roomId}/reopen:
+  /rooms/{roomId}/motion:
+    post:
+      tags: [rooms]
+      summary: Judge sets this room's motion (Chair; Owner/Organizer fall-through)
+      description: >
+        Creates a released event motion and attaches it to the room in one
+        transaction, while the room is `pending` or `judging`. Rooms carry
+        their own motion_id, so rooms of one round can debate different
+        motions (club sessions).
+      parameters:
+        - $ref: "#/components/parameters/roomId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [motion_text]
+              properties:
+                motion_text: { type: string }
+                infoslide: { type: string, nullable: true }
+                keyword: { type: string, nullable: true, maxLength: 120 }
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /rooms/{roomId}/confirm:
     patch:
       tags: [scoring]
-      summary: Reopen a completed room for ballot correction (Owner/Organizer/Admin)
-      description: Clears the ballot (scores and ranks) and returns the room to `judging`.
+      summary: Confirm a submitted ballot, locking the room (Owner/Organizer/Admin)
+      description: >
+        Moves a `completed` room to `confirmed`. A confirmed room rejects
+        score resubmission until it is unconfirmed.
+      parameters:
+        - $ref: "#/components/parameters/roomId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /rooms/{roomId}/unconfirm:
+    patch:
+      tags: [scoring]
+      summary: Unlock a confirmed ballot back to completed (Owner/Organizer/Admin)
       parameters:
         - $ref: "#/components/parameters/roomId"
       responses:

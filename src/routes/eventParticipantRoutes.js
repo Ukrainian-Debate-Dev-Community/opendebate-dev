@@ -11,6 +11,8 @@ router.put(
   restrictToOwnOrg,
   participantController.updateParticipant,
 );
+// auth handled in the controller (organiser or self)
+router.patch("/:participantId/check-in", participantController.updateCheckIn);
 router.delete(
   "/:participantId",
   restrictToOwnOrg,

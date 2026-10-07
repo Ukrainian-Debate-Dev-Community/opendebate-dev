@@ -8,6 +8,7 @@ module.exports = (sequelize) => {
       event_id: { type: DataTypes.INTEGER, allowNull: false },
       motion_text: { type: DataTypes.TEXT, allowNull: false },
       infoslide: { type: DataTypes.TEXT, allowNull: true },
+      keyword: { type: DataTypes.STRING(120), allowNull: true },
       is_released: { type: DataTypes.BOOLEAN, defaultValue: false },
     },
     {

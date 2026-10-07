@@ -82,6 +82,7 @@ describe("Motion API Endpoints", () => {
     const unreleasedMotion = await Motion.create({
       event_id: eventId,
       motion_text: "THW invade Mars.",
+      keyword: "space",
       is_released: false,
     });
     unreleasedMotionId = unreleasedMotion.id;
@@ -100,12 +101,14 @@ describe("Motion API Endpoints", () => {
         .send({
           motion_text: "THW ban something else.",
           infoslide: "Infoslide.",
+          keyword: "bans",
           is_released: false,
         });
 
       expect(res.statusCode).toEqual(201);
       expect(res.body.data.motion_text).toBe("THW ban something else.");
       expect(res.body.data.infoslide).toBe("Infoslide.");
+      expect(res.body.data.keyword).toBe("bans");
       expect(res.body.data.is_released).toBe(false);
     });
 
@@ -176,6 +179,7 @@ describe("Motion API Endpoints", () => {
       // unreleased motion should be masked
       expect(unreleased.motion_text).toBe("Motion will be revealed later.");
       expect(unreleased.infoslide).toBeNull();
+      expect(unreleased.keyword).toBeNull();
       expect(unreleased.is_released).toBe(false);
     });
 
@@ -189,6 +193,7 @@ describe("Motion API Endpoints", () => {
       const unreleased = res.body.data.find((m) => m.id === unreleasedMotionId);
 
       expect(unreleased.motion_text).toBe("THW invade Mars.");
+      expect(unreleased.keyword).toBe("space");
     });
 
     it("should return 404 if no motions exist for the event", async () => {
@@ -270,6 +275,18 @@ describe("Motion API Endpoints", () => {
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.data.is_released).toBe(true);
+    });
+
+    it("should allow an Owner to update the keyword", async () => {
+      const res = await request(app)
+        .put(`/api/events/${eventId}/motions/${unreleasedMotionId}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ keyword: "astropolitics" });
+
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.data.keyword).toBe("astropolitics");
+      // untouched fields stay intact
+      expect(res.body.data.motion_text).toBe("THW invade Mars.");
     });
 
     it("should return 404 if updating a non-existent motion", async () => {

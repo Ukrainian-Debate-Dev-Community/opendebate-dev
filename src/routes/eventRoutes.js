@@ -18,6 +18,9 @@ const participantRoutes = require("./eventParticipantRoutes");
 const organizerRoutes = require("./organizerRoutes");
 const conflictRoutes = require("./conflictRoutes");
 
+// public listing — registered before verifyToken so it stays unauthenticated
+router.get("/", eventController.listPublicEvents);
+
 router.use(verifyToken);
 
 // pass the eventId down
@@ -51,6 +54,13 @@ router.patch(
   "/:eventId/eliminations",
   restrictToOwnOrg,
   eventParticipantController.updateEliminations,
+);
+
+// bulk check-in (participants)
+router.patch(
+  "/:eventId/check-ins",
+  restrictToOwnOrg,
+  eventParticipantController.updateCheckIns,
 );
 
 // get speaker/team standings

@@ -26,7 +26,7 @@ describe("Scoring and Stats API Endpoints", () => {
   let targetUserId;
   let chairUserId;
   let roomId;
-  let completedRoomId;
+  let voidRoomId;
   let noChairRoomId;
 
   let roomTeam1Id, roomTeam2Id;
@@ -209,16 +209,16 @@ describe("Scoring and Stats API Endpoints", () => {
     roomSpeaker3Id = rs3.id;
     roomSpeaker4Id = rs4.id;
 
-    // completed room
-    const completedRoom = await Room.create({
+    // void room
+    const voidRoom = await Room.create({
       round_id: round.id,
       format_id: format.id,
-      status: "completed",
+      status: "void",
     });
-    completedRoomId = completedRoom.id;
+    voidRoomId = voidRoom.id;
 
     await RoomAdjudicator.create({
-      room_id: completedRoomId,
+      room_id: voidRoomId,
       participant_id: pChair.id,
       role: "chair",
     });
@@ -343,9 +343,9 @@ describe("Scoring and Stats API Endpoints", () => {
       expect(res.body.message).toMatch(/lacks a designated chair/i);
     });
 
-    it("should return 409 if the room is already completed or void", async () => {
+    it("should return 409 if the room is void", async () => {
       const res = await request(app)
-        .post(`/api/rooms/${completedRoomId}/scores`)
+        .post(`/api/rooms/${voidRoomId}/scores`)
         .set("Authorization", `Bearer ${chairToken}`)
         .send({
           teamRankings: [{ room_team_id: 1, rank: 1 }],
@@ -480,50 +480,38 @@ describe("Scoring and Stats API Endpoints", () => {
     });
   });
 
-  // PATCH part (Ballot correction)
-  describe("PATCH /api/rooms/:roomId/reopen", () => {
-    it("should return 403 if a non-privileged user tries to reopen a room", async () => {
+  // Ballot correction: resubmission on a completed room replaces the ballot
+  describe("POST /api/rooms/:roomId/scores (resubmission)", () => {
+    it("should let the chair resubmit a corrected ballot, replacing the old one atomically", async () => {
+      // flip the result: team 2 now wins
       const res = await request(app)
-        .patch(`/api/rooms/${roomId}/reopen`)
-        .set("Authorization", `Bearer ${randomToken}`);
-
-      expect(res.statusCode).toEqual(403);
-    });
-
-    it("should return 404 for a non-existent room", async () => {
-      const res = await request(app)
-        .patch(`/api/rooms/99999/reopen`)
-        .set("Authorization", `Bearer ${adminToken}`);
-
-      expect(res.statusCode).toEqual(404);
-    });
-
-    it("should return 409 if the room is not completed", async () => {
-      const res = await request(app)
-        .patch(`/api/rooms/${noChairRoomId}/reopen`)
-        .set("Authorization", `Bearer ${adminToken}`);
-
-      expect(res.statusCode).toEqual(409);
-      expect(res.body.message).toMatch(/Only completed rooms can be reopened/i);
-    });
-
-    it("should reopen a completed room and wipe its ballot", async () => {
-      const res = await request(app)
-        .patch(`/api/rooms/${roomId}/reopen`)
-        .set("Authorization", `Bearer ${adminToken}`);
+        .post(`/api/rooms/${roomId}/scores`)
+        .set("Authorization", `Bearer ${chairToken}`)
+        .send({
+          teamRankings: [
+            { room_team_id: roomTeam1Id, rank: 2 },
+            { room_team_id: roomTeam2Id, rank: 1 },
+          ],
+          speakerScores: [
+            { room_speaker_id: roomSpeaker1Id, score: 76 },
+            { room_speaker_id: roomSpeaker2Id, score: 75 },
+            { room_speaker_id: roomSpeaker3Id, score: 82 },
+            { room_speaker_id: roomSpeaker4Id, score: 81 },
+          ],
+        });
 
       expect(res.statusCode).toEqual(200);
-      expect(res.body.message).toMatch(/Room reopened/i);
 
       const dbRoom = await Room.findByPk(roomId);
-      expect(dbRoom.status).toBe("judging");
+      expect(dbRoom.status).toBe("completed");
 
-      // ranks are cleared so standings cannot pick up the stale ballot
+      // ranks are overwritten by the new ballot
       const rt = await RoomTeam.findByPk(roomTeam1Id);
-      expect(rt.rank).toBeNull();
+      expect(rt.rank).toEqual(2);
       const rs = await RoomSpeaker.findByPk(roomSpeaker1Id);
-      expect(rs.rank).toBeNull();
+      expect(rs.rank).toEqual(2);
 
+      // scores are replaced, not stacked: exactly one per speaker remains
       const scores = await Score.count({
         include: [
           {
@@ -532,10 +520,15 @@ describe("Scoring and Stats API Endpoints", () => {
           },
         ],
       });
-      expect(scores).toEqual(0);
+      expect(scores).toEqual(4);
+
+      const newScore = await Score.findOne({
+        where: { room_speaker_id: roomSpeaker1Id },
+      });
+      expect(parseFloat(newScore.value)).toEqual(76);
     });
 
-    it("should allow the chair to resubmit a corrected ballot after reopening", async () => {
+    it("should restore the original result on a further resubmission", async () => {
       const res = await request(app)
         .post(`/api/rooms/${roomId}/scores`)
         .set("Authorization", `Bearer ${chairToken}`)
@@ -558,6 +551,16 @@ describe("Scoring and Stats API Endpoints", () => {
       expect(dbRoom.status).toBe("completed");
       const rt = await RoomTeam.findByPk(roomTeam1Id);
       expect(rt.rank).toEqual(1);
+
+      const scores = await Score.count({
+        include: [
+          {
+            model: RoomSpeaker,
+            where: { room_team_id: [roomTeam1Id, roomTeam2Id] },
+          },
+        ],
+      });
+      expect(scores).toEqual(4);
     });
   });
 

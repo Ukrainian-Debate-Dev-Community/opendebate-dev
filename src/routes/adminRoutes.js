@@ -9,5 +9,6 @@ const {
 router.use(verifyToken);
 
 router.post("/grant", restrictToAdmin, adminController.grantAdmin);
+router.post("/anonymise", restrictToAdmin, adminController.anonymiseUser);
 
 module.exports = router;

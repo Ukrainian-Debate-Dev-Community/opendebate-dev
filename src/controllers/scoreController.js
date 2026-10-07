@@ -59,7 +59,9 @@ const submitScores = async (req, res, next) => {
     });
     if (!room) throw new AppError("Room not found.", 404);
 
-    if (room.status === "completed" || room.status === "void") {
+    // completed rooms stay editable: a resubmission atomically replaces the
+    // previous ballot (ranks and scores). Only confirm locks, only void kills.
+    if (room.status === "confirmed" || room.status === "void") {
       throw new AppError(
         `Cannot submit scores. Room is already ${room.status}.`,
         409,
@@ -197,13 +199,13 @@ const submitScores = async (req, res, next) => {
   }
 };
 
-const reopenRoom = async (req, res, next) => {
+// organiser/tab action: lock a submitted ballot. A confirmed room can no
+// longer be rescored until it is explicitly unconfirmed.
+const confirmRoom = async (req, res, next) => {
   const transaction = await sequelize.transaction();
 
   try {
-    const roomId = req.params.roomId;
-
-    const room = await Room.findByPk(roomId, {
+    const room = await Room.findByPk(req.params.roomId, {
       lock: transaction.LOCK.UPDATE,
       transaction,
     });
@@ -211,46 +213,19 @@ const reopenRoom = async (req, res, next) => {
 
     if (room.status !== "completed") {
       throw new AppError(
-        `Cannot reopen room. Only completed rooms can be reopened (current status: ${room.status}).`,
+        `Cannot confirm room. Only completed rooms can be confirmed (current status: ${room.status}).`,
         409,
       );
     }
 
-    // wipe the ballot: standings read ranks directly, so stale ranks/scores
-    // must not survive between reopening and resubmission
-    const roomAdjudicators = await RoomAdjudicator.findAll({
-      where: { room_id: roomId },
-      attributes: ["id"],
-      transaction,
-    });
-    await Score.destroy({
-      where: { room_adjudicator_id: roomAdjudicators.map((ra) => ra.id) },
-      transaction,
-    });
-
-    const roomTeams = await RoomTeam.findAll({
-      where: { room_id: roomId },
-      attributes: ["id"],
-      transaction,
-    });
-    const roomTeamIds = roomTeams.map((rt) => rt.id);
-    await RoomTeam.update(
-      { rank: null },
-      { where: { id: roomTeamIds }, transaction },
-    );
-    await RoomSpeaker.update(
-      { rank: null },
-      { where: { room_team_id: roomTeamIds }, transaction },
-    );
-
-    room.status = "judging";
+    room.status = "confirmed";
     await room.save({ transaction });
 
     await transaction.commit();
 
     res.status(200).json({
       status: "success",
-      message: "Room reopened. Previous ballot cleared, awaiting new scores.",
+      message: "Ballot confirmed. The room is now locked.",
     });
   } catch (error) {
     await transaction.rollback();
@@ -258,4 +233,38 @@ const reopenRoom = async (req, res, next) => {
   }
 };
 
-module.exports = { submitScores, reopenRoom };
+// escape hatch for an accidental confirmation — returns the room to
+// 'completed' so the ordinary resubmit flow applies again.
+const unconfirmRoom = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+
+  try {
+    const room = await Room.findByPk(req.params.roomId, {
+      lock: transaction.LOCK.UPDATE,
+      transaction,
+    });
+    if (!room) throw new AppError("Room not found.", 404);
+
+    if (room.status !== "confirmed") {
+      throw new AppError(
+        `Cannot unconfirm room. Only confirmed rooms can be unconfirmed (current status: ${room.status}).`,
+        409,
+      );
+    }
+
+    room.status = "completed";
+    await room.save({ transaction });
+
+    await transaction.commit();
+
+    res.status(200).json({
+      status: "success",
+      message: "Ballot unlocked. The room is back to completed.",
+    });
+  } catch (error) {
+    await transaction.rollback();
+    next(error);
+  }
+};
+
+module.exports = { submitScores, confirmRoom, unconfirmRoom };
