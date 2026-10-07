@@ -1,13 +1,12 @@
 const {
   Team,
   RoomTeam,
-  Room,
-  Round,
   EventParticipant,
   RoomSpeaker,
   Score,
 } = require("../models");
 const { hasEventPrivilege } = require("../middleware/authMiddleware");
+const { getEventRooms } = require("../utils/finalRooms");
 
 // Swing teams occupy slots and hold ranks (so they still count toward a
 // room's N), but performances delivered in a swing slot are excluded from
@@ -37,19 +36,8 @@ const getTeamStandings = async (req, res, next) => {
 
     // authorised users see all rounds
     // others only see visible rounds
-    const roundFilter = isAuthorised
-      ? { event_id: eventId }
-      : { event_id: eventId, is_hidden: false };
-
-    const rounds = await Round.findAll({
-      where: roundFilter,
-      attributes: ["id"],
-    });
-    const roundIds = rounds.map((r) => r.id);
-
-    const rooms = await Room.findAll({
-      where: { round_id: roundIds },
-      attributes: ["id"],
+    const rooms = await getEventRooms([eventId], {
+      includeHidden: isAuthorised,
     });
     const roomIds = rooms.map((r) => r.id);
 
@@ -89,20 +77,8 @@ const getSpeakerStandings = async (req, res, next) => {
       attributes: ["id", "display_name"],
     });
 
-    // the same logic as for teams
-    const roundFilter = isAuthorised
-      ? { event_id: eventId }
-      : { event_id: eventId, is_hidden: false };
-
-    const rounds = await Round.findAll({
-      where: roundFilter,
-      attributes: ["id"],
-    });
-    const roundIds = rounds.map((r) => r.id);
-
-    const rooms = await Room.findAll({
-      where: { round_id: roundIds },
-      attributes: ["id"],
+    const rooms = await getEventRooms([eventId], {
+      includeHidden: isAuthorised,
     });
     const roomIds = rooms.map((r) => r.id);
 
@@ -168,18 +144,8 @@ const getCalculatedTeamStandings = async (req, res, next) => {
       attributes: ["id", "name"],
     });
 
-    const roundFilter = isAuthorised
-      ? { event_id: eventId }
-      : { event_id: eventId, is_hidden: false };
-    const rounds = await Round.findAll({
-      where: roundFilter,
-      attributes: ["id"],
-    });
-    const roundIds = rounds.map((r) => r.id);
-
-    const rooms = await Room.findAll({
-      where: { round_id: roundIds },
-      attributes: ["id"],
+    const rooms = await getEventRooms([eventId], {
+      includeHidden: isAuthorised,
     });
     const roomIds = rooms.map((r) => r.id);
 
@@ -230,18 +196,8 @@ const getCalculatedSpeakerStandings = async (req, res, next) => {
       attributes: ["id", "display_name"],
     });
 
-    const roundFilter = isAuthorised
-      ? { event_id: eventId }
-      : { event_id: eventId, is_hidden: false };
-    const rounds = await Round.findAll({
-      where: roundFilter,
-      attributes: ["id"],
-    });
-    const roundIds = rounds.map((r) => r.id);
-
-    const rooms = await Room.findAll({
-      where: { round_id: roundIds },
-      attributes: ["id"],
+    const rooms = await getEventRooms([eventId], {
+      includeHidden: isAuthorised,
     });
     const roomIds = rooms.map((r) => r.id);
 

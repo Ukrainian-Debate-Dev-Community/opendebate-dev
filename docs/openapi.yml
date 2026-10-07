@@ -251,6 +251,21 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
 
+  /organisations/{organisationId}/stats:
+    get:
+      tags: [organisations]
+      summary: Organisation-level statistics over completed events
+      description: >
+        `total_sessions` counts the organisation's completed events.
+        `avg_winner_speaker_points` / `avg_fourth_place_speaker_points`
+        average the summed speaker points of the rank-1 / rank-4 team per
+        final room across those events (2 d.p., null when no room qualifies).
+      parameters:
+        - $ref: "#/components/parameters/organisationId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /organisations/{organisationId}/restore:
     patch:
       tags: [organisations]
@@ -597,6 +612,53 @@ paths:
         - $ref: "#/components/parameters/eventId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+
+  # ─── statistics (event-scoped) ───
+  # Computed over rooms with a final ballot only ('completed', plus
+  # 'confirmed' once ballot confirmation exists). Hidden rounds are
+  # visible to admins/owners/organisers only, like the standings.
+  /events/{eventId}/stats/speakers:
+    get:
+      tags: [standings]
+      summary: Raw speaker-score statistics per speaker
+      description: >
+        Per speaker: number of rooms scored in (`rounds`), the sum (`total`),
+        mean (`avg`) and population standard deviation (`std`, 2 d.p.) of
+        their raw speaker scores. An iron-person's two speeches in one room
+        both feed total/avg/std while counting that room once; speakers with
+        no scores report avg/std as null.
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /events/{eventId}/stats/teams:
+    get:
+      tags: [standings]
+      summary: Team statistics (summed speaker points, firsts and fourths)
+      description: >
+        Per team: `total_speaker_points` (sum of the team's speaker scores),
+        `first_places` and `fourth_places` (count of rank-1 / rank-4 results).
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /events/{eventId}/stats/judges:
+    get:
+      tags: [standings]
+      summary: Judge statistics (rooms judged, average feedback)
+      description: >
+        Per adjudicator participant: `rooms_judged` (final rooms they are
+        assigned to) and `avg_feedback` (mean feedback score received in the
+        event's final rooms, 2 d.p.; null without feedback).
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   # ─── teams (event-scoped) ───
   /events/{eventId}/teams:
