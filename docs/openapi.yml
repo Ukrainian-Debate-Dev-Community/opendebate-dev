@@ -561,6 +561,10 @@ paths:
                   items: { type: integer }
                   description: Duplicates allowed (iron-person)
                 is_temporary: { type: boolean, default: false }
+                is_swing:
+                  type: boolean
+                  default: false
+                  description: Swing teams fill empty slots and are excluded from team standings
       responses:
         "201": { $ref: "#/components/responses/Success" }
         "409":
