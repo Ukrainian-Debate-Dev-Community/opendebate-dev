@@ -150,30 +150,14 @@ const getUserStats = async (req, res, next) => {
 // Statistics are computed over rooms whose ballot is final: 'completed'
 // today, plus 'confirmed' once ballot confirmation lands, so rooms that
 // are still pending/live/judging (or voided) never leak into stats.
-const FINAL_ROOM_STATUSES = ["completed", "confirmed"];
+const { getEventRooms } = require("../utils/finalRooms");
 
 const round2 = (value) => parseFloat(value.toFixed(2));
 
 // same visibility rule as the standings endpoints: privileged viewers
 // (admin/owner/organiser) see hidden rounds, everyone else only visible ones
-const getFinalRooms = async (eventId, isAuthorised) => {
-  const roundFilter = isAuthorised
-    ? { event_id: eventId }
-    : { event_id: eventId, is_hidden: false };
-
-  const rounds = await Round.findAll({
-    where: roundFilter,
-    attributes: ["id"],
-  });
-
-  return Room.findAll({
-    where: {
-      round_id: rounds.map((r) => r.id),
-      status: FINAL_ROOM_STATUSES,
-    },
-    attributes: ["id"],
-  });
-};
+const getFinalRooms = (eventId, isAuthorised) =>
+  getEventRooms([eventId], { includeHidden: isAuthorised, finalOnly: true });
 
 const requireEvent = async (eventId) => {
   const event = await Event.findByPk(eventId);
@@ -411,16 +395,9 @@ const getOrganisationStats = async (req, res, next) => {
     });
     const eventIds = completedEvents.map((e) => e.id);
 
-    const rounds = await Round.findAll({
-      where: { event_id: eventIds },
-      attributes: ["id"],
-    });
-    const rooms = await Room.findAll({
-      where: {
-        round_id: rounds.map((r) => r.id),
-        status: FINAL_ROOM_STATUSES,
-      },
-      attributes: ["id"],
+    const rooms = await getEventRooms(eventIds, {
+      includeHidden: true,
+      finalOnly: true,
     });
     const roomIds = rooms.map((r) => r.id);
 
