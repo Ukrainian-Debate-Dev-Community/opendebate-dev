@@ -153,6 +153,12 @@ const updateUsername = async (req, res, next) => {
 };
 
 const deleteUser = async (req, res, next) => {
+  // participant rows survive the account (user_id becomes NULL - "guest"),
+  // so their display_name must be scrubbed on EVERY deletion path, not
+  // only the FK-blocked fallback: otherwise a hard delete leaves the real
+  // name orphaned in historical rooms and standings forever.
+  const anonymisedName = `deleted_user_${crypto.randomUUID()}`;
+
   try {
     const user = await User.findByPk(req.user.id);
 
@@ -160,8 +166,15 @@ const deleteUser = async (req, res, next) => {
       throw new AppError("User not found.", 404);
     }
 
-    // try the Hard Delete
-    await user.destroy();
+    await sequelize.transaction(async (t) => {
+      await EventParticipant.update(
+        { display_name: anonymisedName },
+        { where: { user_id: user.id }, transaction: t },
+      );
+
+      // try the Hard Delete
+      await user.destroy({ transaction: t });
+    });
 
     res.status(204).json({ status: "success", data: null });
   } catch (error) {
@@ -177,10 +190,17 @@ const deleteUser = async (req, res, next) => {
           });
 
           userToSoftDelete.is_deleted = true;
-          userToSoftDelete.username = `deleted_user_${crypto.randomUUID()}`;
+          userToSoftDelete.username = anonymisedName;
           userToSoftDelete.password = crypto.randomBytes(32).toString("hex");
 
           await userToSoftDelete.save({ transaction: t });
+
+          // same scrub as the hard-delete path (that transaction rolled
+          // back together with the failed destroy)
+          await EventParticipant.update(
+            { display_name: anonymisedName },
+            { where: { user_id: userToSoftDelete.id }, transaction: t },
+          );
         });
 
         return res.status(200).json({
