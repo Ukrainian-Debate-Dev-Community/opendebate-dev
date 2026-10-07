@@ -43,7 +43,7 @@ const submitFeedback = async (req, res, next) => {
 
     const room = await Room.findByPk(roomId, { transaction });
     if (!room) throw new AppError("Room not found.", 404);
-    if (room.status !== "completed") {
+    if (room.status !== "completed" && room.status !== "confirmed") {
       throw new AppError(
         "Cannot submit feedback. The room is not yet completed.",
         409,

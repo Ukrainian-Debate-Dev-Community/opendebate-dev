@@ -12,7 +12,13 @@ module.exports = (sequelize) => {
         type: DataTypes.STRING(20),
         defaultValue: "pending",
         validate: {
-          isIn: [["pending", "live", "judging", "completed", "void"]],
+          // ballot lifecycle: submitScores moves a room to 'completed'
+          // (= submitted ballot) and stays allowed on completed rooms as an
+          // atomic replace; an organiser may then 'confirm' it, locking the
+          // ballot against resubmission.
+          isIn: [
+            ["pending", "live", "judging", "completed", "confirmed", "void"],
+          ],
         },
       },
     },
