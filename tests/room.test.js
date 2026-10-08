@@ -13,6 +13,8 @@ const {
   TeamMember,
   Room,
   RoomAdjudicator,
+  RoomSpeaker,
+  Score,
 } = require("../src/models");
 const jwt = require("jsonwebtoken");
 
@@ -552,6 +554,34 @@ describe("Room API Endpoints", () => {
 
       // verify speaker mapping worked
       expect(room.RoomTeams[0].RoomSpeakers.length).toBe(2);
+    });
+
+    it("should include submitted score values under each room speaker", async () => {
+      const chair = await RoomAdjudicator.findOne({
+        where: { room_id: roomId, role: "chair" },
+      });
+      const speaker = await RoomSpeaker.findOne({
+        include: [{ model: require("../src/models").RoomTeam, where: { room_id: roomId } }],
+      });
+      await Score.create({
+        room_speaker_id: speaker.id,
+        room_adjudicator_id: chair.id,
+        value: 79,
+      });
+
+      const res = await request(app)
+        .get(`/api/rounds/${roundId}/rooms`)
+        .set("Authorization", `Bearer ${randomToken}`);
+
+      expect(res.statusCode).toEqual(200);
+      const room = res.body.data.find((r) => r.id === roomId);
+      const scored = room.RoomTeams.flatMap((rt) => rt.RoomSpeakers).find(
+        (rs) => rs.id === speaker.id,
+      );
+      expect(scored.Scores.length).toBe(1);
+      expect(scored.Scores[0].value).toBe(79);
+
+      await Score.destroy({ where: { room_adjudicator_id: chair.id } });
     });
   });
 

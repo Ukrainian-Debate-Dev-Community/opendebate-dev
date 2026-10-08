@@ -9,6 +9,7 @@ const {
   TeamMember,
   Motion,
   Round,
+  Score,
   sequelize,
 } = require("../models");
 const AppError = require("../utils/AppError");
@@ -459,6 +460,9 @@ const getRoundRooms = async (req, res, next) => {
                   attributes: ["id", "display_name"],
                   paranoid: false,
                 },
+                // submitted score values ride along like ranks do, so
+                // a gateway can prefill a ballot correction form
+                { model: Score, attributes: ["value"] },
               ],
             },
           ],
