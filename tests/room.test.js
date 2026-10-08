@@ -566,7 +566,7 @@ describe("Room API Endpoints", () => {
       await Score.create({
         room_speaker_id: speaker.id,
         room_adjudicator_id: chair.id,
-        value: 78.5,
+        value: 79,
       });
 
       const res = await request(app)
@@ -579,7 +579,7 @@ describe("Room API Endpoints", () => {
         (rs) => rs.id === speaker.id,
       );
       expect(scored.Scores.length).toBe(1);
-      expect(parseFloat(scored.Scores[0].value)).toBe(78.5);
+      expect(scored.Scores[0].value).toBe(79);
 
       await Score.destroy({ where: { room_adjudicator_id: chair.id } });
     });

@@ -7,8 +7,7 @@ module.exports = (sequelize) => {
       id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
       room_speaker_id: { type: DataTypes.INTEGER, allowNull: false },
       room_adjudicator_id: { type: DataTypes.INTEGER, allowNull: false },
-      // DECIMAL(4,1): BP scores move in 0.5 steps
-      value: { type: DataTypes.DECIMAL(4, 1), allowNull: false },
+      value: { type: DataTypes.SMALLINT, allowNull: false },
     },
     {
       tableName: "scores",

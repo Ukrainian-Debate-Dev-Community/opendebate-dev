@@ -132,8 +132,8 @@ const getUserStats = async (req, res, next) => {
         total_ballots_received: parseInt(core.total_ballots) || 0,
         total_debates_ranked: totalRankedRooms,
         average_speaker_score: parseFloat(core.avg_score || 0).toFixed(2),
-        highest_score: parseFloat(core.highest_score) || 0,
-        lowest_score: parseFloat(core.lowest_score) || 0,
+        highest_score: core.highest_score || 0,
+        lowest_score: core.lowest_score || 0,
       },
       placements: {
         first_places: firstPlaces,
