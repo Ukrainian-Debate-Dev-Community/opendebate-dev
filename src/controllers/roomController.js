@@ -367,11 +367,11 @@ const createRoom = async (req, res, next) => {
   }
 };
 
-// judge action (chair, with the usual owner/organiser fall-through):
+// adjudicator action (chair, with the usual owner/organiser fall-through):
 // set THIS room's motion. Motions stay event-scoped rows; the room
 // points at its own motion, so different rooms of one round can
 // debate different motions (club sessions). Created released — the
-// judge announces it to the room. Rooms are action-based, so this is
+// adjudicator announces it to the room. Rooms are action-based, so this is
 // a dedicated action next to /scores and /confirm rather than a
 // generic room update.
 const setRoomMotion = async (req, res, next) => {
@@ -433,7 +433,14 @@ const getRoundRooms = async (req, res, next) => {
         {
           model: Motion,
           // created_at rides along so clients can show the prep clock
-          attributes: ["id", "motion_text", "infoslide", "keyword", "is_released", "created_at"],
+          attributes: [
+            "id",
+            "motion_text",
+            "infoslide",
+            "keyword",
+            "is_released",
+            "created_at",
+          ],
           paranoid: false,
         },
         {
@@ -451,7 +458,11 @@ const getRoundRooms = async (req, res, next) => {
           model: RoomTeam,
           attributes: ["id", "position", "rank"],
           include: [
-            { model: Team, attributes: ["id", "name", "is_temporary"], paranoid: false },
+            {
+              model: Team,
+              attributes: ["id", "name", "is_temporary"],
+              paranoid: false,
+            },
             {
               model: RoomSpeaker,
               attributes: ["id", "rank"],

@@ -660,20 +660,6 @@ paths:
         "200": { $ref: "#/components/responses/Success" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /events/{eventId}/stats/judges:
-    get:
-      tags: [standings]
-      deprecated: true
-      summary: Former address of the adjudicator statistics
-      description: >
-        Same data as `/stats/adjudicators`, with `rooms_judged` alongside
-        `rooms_adjudicated`. Kept for clients built before the rename.
-      parameters:
-        - $ref: "#/components/parameters/eventId"
-      responses:
-        "200": { $ref: "#/components/responses/Success" }
-        "404": { $ref: "#/components/responses/NotFound" }
-
   # ─── teams (event-scoped) ───
   /events/{eventId}/teams:
     parameters:

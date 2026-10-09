@@ -117,14 +117,14 @@ describe("Swing Team Flag", () => {
       position: 1,
       rank: 2,
     });
-    const judge = await EventParticipant.create({
+    const adjudicator = await EventParticipant.create({
       event_id: eventId,
       display_name: "Swing Judge",
       role: "adjudicator",
     });
     const chair = await RoomAdjudicator.create({
       room_id: room.id,
-      participant_id: judge.id,
+      participant_id: adjudicator.id,
       role: "chair",
     });
     await Score.create({

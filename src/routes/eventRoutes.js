@@ -84,15 +84,6 @@ router.get(
 router.get("/:eventId/stats/speakers", statsController.getSpeakerStats);
 router.get("/:eventId/stats/teams", statsController.getTeamStats);
 router.get("/:eventId/stats/adjudicators", statsController.getAdjudicatorStats);
-// the pre-rename address, kept (with rooms_judged) so existing clients keep working
-router.get(
-  "/:eventId/stats/judges",
-  (req, _res, next) => {
-    req.legacyJudgeNames = true;
-    next();
-  },
-  statsController.getAdjudicatorStats,
-);
 
 // teams
 router.get("/:eventId/teams", teamController.getEventTeams);

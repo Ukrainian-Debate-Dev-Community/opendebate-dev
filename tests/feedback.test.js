@@ -317,7 +317,7 @@ describe("Feedback API Endpoints", () => {
         });
 
       expect(res.statusCode).toEqual(400);
-      expect(res.body.message).toMatch(/did not judge in this room/i);
+      expect(res.body.message).toMatch(/did not adjudicate in this room/i);
     });
 
     it("should return 400 if the issuing speaker was not in the specified room", async () => {
@@ -356,7 +356,7 @@ describe("Feedback API Endpoints", () => {
           adjudicator_id: adjudicatorId,
           issuer_participant_id: speakerId,
           score: 8,
-          comment: "Great judge.",
+          comment: "Great adjudication.",
         });
 
       expect(res.statusCode).toEqual(409);

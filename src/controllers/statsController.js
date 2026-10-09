@@ -316,7 +316,6 @@ const getTeamStats = async (req, res, next) => {
 };
 
 // GET /api/events/:eventId/stats/adjudicators
-// (/stats/judges answers too, with rooms_judged, for clients built before the rename)
 const getAdjudicatorStats = async (req, res, next) => {
   try {
     const { eventId } = req.params;
@@ -371,9 +370,7 @@ const getAdjudicatorStats = async (req, res, next) => {
         feedback.length > 0
           ? round2(feedback.reduce((sum, v) => sum + v, 0) / feedback.length)
           : null;
-      return req.legacyJudgeNames
-        ? { ...rest, rooms_judged: rest.rooms_adjudicated, avg_feedback }
-        : { ...rest, avg_feedback };
+      return { ...rest, avg_feedback };
     });
 
     res.status(200).json({ status: "success", data });
