@@ -189,6 +189,8 @@ describe("Per-room motions (judge sets the motion of their room)", () => {
     expect(withMotion.Motion.motion_text).toBe(
       "THW let judges set motions",
     );
+    // created_at rides along so clients can show the prep clock
+    expect(withMotion.Motion.created_at).toBeTruthy();
   });
 
   it("stores the keyword when the judge sets the motion", async () => {

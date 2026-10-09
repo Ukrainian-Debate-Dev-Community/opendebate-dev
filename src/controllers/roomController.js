@@ -432,7 +432,8 @@ const getRoundRooms = async (req, res, next) => {
         { model: Format, attributes: ["name", "code"], paranoid: false },
         {
           model: Motion,
-          attributes: ["id", "motion_text", "infoslide", "keyword", "is_released"],
+          // created_at rides along so clients can show the prep clock
+          attributes: ["id", "motion_text", "infoslide", "keyword", "is_released", "created_at"],
           paranoid: false,
         },
         {
