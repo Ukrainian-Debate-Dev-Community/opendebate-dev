@@ -465,7 +465,7 @@ const getRoundRooms = async (req, res, next) => {
             },
             {
               model: RoomSpeaker,
-              attributes: ["id", "rank"],
+              attributes: ["id", "rank", "is_iron"],
               include: [
                 {
                   model: EventParticipant,
