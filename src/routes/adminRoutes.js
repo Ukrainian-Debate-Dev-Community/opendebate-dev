@@ -10,5 +10,6 @@ router.use(verifyToken);
 
 router.post("/grant", restrictToAdmin, adminController.grantAdmin);
 router.post("/anonymise", restrictToAdmin, adminController.anonymiseUser);
+router.post("/merge", restrictToAdmin, adminController.mergeUser);
 
 module.exports = router;
