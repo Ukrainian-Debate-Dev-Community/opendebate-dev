@@ -55,7 +55,7 @@ describe("Scoring and Stats API Endpoints", () => {
 
     // create Chair User for submission
     const chairUser = await User.create({
-      username: "chair_judge",
+      username: "chair_adjudicator",
       password: "hashedpassword123",
     });
     chairUserId = chairUser.id;
@@ -66,7 +66,7 @@ describe("Scoring and Stats API Endpoints", () => {
     );
 
     const panelistUser = await User.create({
-      username: "panelist_judge",
+      username: "panelist_adjudicator",
       password: "hashedpassword123",
     });
     panelistToken = jwt.sign(

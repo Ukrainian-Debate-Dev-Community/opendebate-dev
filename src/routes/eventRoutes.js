@@ -83,7 +83,7 @@ router.get(
 // statistics (read-auth like standings)
 router.get("/:eventId/stats/speakers", statsController.getSpeakerStats);
 router.get("/:eventId/stats/teams", statsController.getTeamStats);
-router.get("/:eventId/stats/judges", statsController.getJudgeStats);
+router.get("/:eventId/stats/adjudicators", statsController.getAdjudicatorStats);
 
 // teams
 router.get("/:eventId/teams", teamController.getEventTeams);

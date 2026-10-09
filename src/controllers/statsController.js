@@ -315,8 +315,8 @@ const getTeamStats = async (req, res, next) => {
   }
 };
 
-// GET /api/events/:eventId/stats/judges
-const getJudgeStats = async (req, res, next) => {
+// GET /api/events/:eventId/stats/adjudicators
+const getAdjudicatorStats = async (req, res, next) => {
   try {
     const { eventId } = req.params;
     await requireEvent(eventId);
@@ -330,42 +330,42 @@ const getJudgeStats = async (req, res, next) => {
     const rooms = await getFinalRooms(eventId, isAuthorised);
     const roomIds = rooms.map((r) => r.id);
 
-    const judges = await EventParticipant.findAll({
+    const adjudicators = await EventParticipant.findAll({
       where: { event_id: eventId, role: "adjudicator" },
       attributes: ["id", "display_name"],
       order: [["id", "ASC"]],
     });
-    const judgeIds = judges.map((j) => j.id);
+    const adjudicatorIds = adjudicators.map((a) => a.id);
 
     const roomAdjudicators = await RoomAdjudicator.findAll({
-      where: { room_id: roomIds, participant_id: judgeIds },
+      where: { room_id: roomIds, participant_id: adjudicatorIds },
       attributes: ["participant_id", "room_id"],
     });
 
     const feedbacks = await Feedback.findAll({
-      where: { room_id: roomIds, adjudicator_id: judgeIds },
+      where: { room_id: roomIds, adjudicator_id: adjudicatorIds },
       attributes: ["adjudicator_id", "score"],
     });
 
     const stats = Object.create(null);
-    judges.forEach((j) => {
-      stats[j.id] = {
-        id: j.id,
-        name: j.display_name,
-        rooms_judged: 0,
+    adjudicators.forEach((a) => {
+      stats[a.id] = {
+        id: a.id,
+        name: a.display_name,
+        rooms_adjudicated: 0,
         feedback: [],
       };
     });
 
     roomAdjudicators.forEach((ra) => {
-      stats[ra.participant_id].rooms_judged += 1;
+      stats[ra.participant_id].rooms_adjudicated += 1;
     });
     feedbacks.forEach((fb) => {
       stats[fb.adjudicator_id].feedback.push(Number(fb.score));
     });
 
-    const data = judges.map((j) => {
-      const { feedback, ...rest } = stats[j.id];
+    const data = adjudicators.map((a) => {
+      const { feedback, ...rest } = stats[a.id];
       const avg_feedback =
         feedback.length > 0
           ? round2(feedback.reduce((sum, v) => sum + v, 0) / feedback.length)
@@ -454,6 +454,6 @@ module.exports = {
   getUserStats,
   getSpeakerStats,
   getTeamStats,
-  getJudgeStats,
+  getAdjudicatorStats,
   getOrganisationStats,
 };

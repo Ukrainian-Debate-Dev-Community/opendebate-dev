@@ -33,7 +33,7 @@ describe("Statistics API Endpoints", () => {
 
   let teamIds; // { A, B, C, D }
   let speakerIds; // { s1..s6, iron }
-  let judgeIds; // { j1, j2 }
+  let adjudicatorIds; // { j1, j2 }
 
   // builds one room with 4 ranked teams; speakers[i] is the array of
   // [participantId, score] pairs for the team ranked i+1
@@ -45,7 +45,7 @@ describe("Statistics API Endpoints", () => {
     });
     const chairRa = await RoomAdjudicator.create({
       room_id: room.id,
-      participant_id: judgeIds.j1,
+      participant_id: adjudicatorIds.j1,
       role: "chair",
     });
     let position = 1;
@@ -150,7 +150,7 @@ describe("Statistics API Endpoints", () => {
       display_name: "Judge 2",
       role: "adjudicator",
     });
-    judgeIds = { j1: j1.id, j2: j2.id };
+    adjudicatorIds = { j1: j1.id, j2: j2.id };
 
     const mkTeam = async (name) =>
       (await Team.create({ event_id: eventId, name })).id;
@@ -262,14 +262,14 @@ describe("Statistics API Endpoints", () => {
     });
     await Feedback.create({
       room_id: finalRooms[0].id,
-      adjudicator_id: judgeIds.j1,
+      adjudicator_id: adjudicatorIds.j1,
       issuer_team_id: teamIds.B,
       issuer_participant_id: null,
       score: 8,
     });
     await Feedback.create({
       room_id: finalRooms[0].id,
-      adjudicator_id: judgeIds.j1,
+      adjudicator_id: adjudicatorIds.j1,
       issuer_participant_id: speakerIds.s3,
       issuer_team_id: null,
       score: 9,
@@ -277,7 +277,7 @@ describe("Statistics API Endpoints", () => {
     // ... and one on the judging room, which must not count
     await Feedback.create({
       room_id: judgingRoom.id,
-      adjudicator_id: judgeIds.j1,
+      adjudicator_id: adjudicatorIds.j1,
       issuer_team_id: teamIds.B,
       issuer_participant_id: null,
       score: 1,
@@ -290,7 +290,9 @@ describe("Statistics API Endpoints", () => {
 
   describe("GET /api/events/:eventId/stats/speakers", () => {
     it("requires authentication", async () => {
-      const res = await request(app).get(`/api/events/${eventId}/stats/speakers`);
+      const res = await request(app).get(
+        `/api/events/${eventId}/stats/speakers`,
+      );
       expect(res.statusCode).toBe(401);
     });
 
@@ -396,37 +398,44 @@ describe("Statistics API Endpoints", () => {
     });
   });
 
-  describe("GET /api/events/:eventId/stats/judges", () => {
-    it("reports rooms judged in final rooms and average feedback", async () => {
+  describe("GET /api/events/:eventId/stats/adjudicators", () => {
+    it("reports rooms adjudicated in final rooms and average feedback", async () => {
       const res = await request(app)
-        .get(`/api/events/${eventId}/stats/judges`)
+        .get(`/api/events/${eventId}/stats/adjudicators`)
         .set("Authorization", `Bearer ${ownerToken}`);
 
       expect(res.statusCode).toBe(200);
       const byId = Object.fromEntries(res.body.data.map((j) => [j.id, j]));
 
       // judging room excluded; feedback on it (score 1) excluded too
-      expect(byId[judgeIds.j1]).toEqual({
-        id: judgeIds.j1,
+      expect(byId[adjudicatorIds.j1]).toEqual({
+        id: adjudicatorIds.j1,
         name: "Judge 1",
-        rooms_judged: 2,
+        rooms_adjudicated: 2,
         avg_feedback: 8.5,
       });
-      expect(byId[judgeIds.j2]).toEqual({
-        id: judgeIds.j2,
+      expect(byId[adjudicatorIds.j2]).toEqual({
+        id: adjudicatorIds.j2,
         name: "Judge 2",
-        rooms_judged: 0,
+        rooms_adjudicated: 0,
         avg_feedback: null,
       });
     });
 
     it("excludes hidden rounds for unprivileged viewers", async () => {
       const res = await request(app)
-        .get(`/api/events/${eventId}/stats/judges`)
+        .get(`/api/events/${eventId}/stats/adjudicators`)
         .set("Authorization", `Bearer ${randomToken}`);
 
-      const j1 = res.body.data.find((j) => j.id === judgeIds.j1);
-      expect(j1).toMatchObject({ rooms_judged: 1 });
+      const j1 = res.body.data.find((j) => j.id === adjudicatorIds.j1);
+      expect(j1).toMatchObject({ rooms_adjudicated: 1 });
+    });
+
+    it("the former /stats/judges address is gone", async () => {
+      const res = await request(app)
+        .get(`/api/events/${eventId}/stats/judges`)
+        .set("Authorization", `Bearer ${ownerToken}`);
+      expect(res.statusCode).toBe(404);
     });
   });
 

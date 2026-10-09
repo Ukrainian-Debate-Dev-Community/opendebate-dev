@@ -56,7 +56,7 @@ const submitFeedback = async (req, res, next) => {
     });
     if (!validAdjudicator) {
       throw new AppError(
-        "The specified adjudicator did not judge in this room.",
+        "The specified adjudicator did not adjudicate in this room.",
         400,
       );
     }

@@ -20,7 +20,7 @@ const sign = (id) =>
     expiresIn: "1h",
   });
 
-describe("Per-room motions (judge sets the motion of their room)", () => {
+describe("Per-room motions (the adjudicator sets the motion of their room)", () => {
   let ownerToken;
   let chairToken;
   let randomToken;
@@ -122,9 +122,7 @@ describe("Per-room motions (judge sets the motion of their room)", () => {
       .send({ motion_text: "THW let judges set motions" });
 
     expect(res.statusCode).toBe(201);
-    expect(res.body.data.motion.motion_text).toBe(
-      "THW let judges set motions",
-    );
+    expect(res.body.data.motion.motion_text).toBe("THW let judges set motions");
     expect(res.body.data.motion.is_released).toBe(true);
     expect(res.body.data.motion.event_id).toBe(eventId);
 
@@ -186,14 +184,12 @@ describe("Per-room motions (judge sets the motion of their room)", () => {
 
     expect(res.statusCode).toBe(200);
     const withMotion = res.body.data.find((r) => r.id === chairedRoomId);
-    expect(withMotion.Motion.motion_text).toBe(
-      "THW let judges set motions",
-    );
+    expect(withMotion.Motion.motion_text).toBe("THW let judges set motions");
     // created_at rides along so clients can show the prep clock
     expect(withMotion.Motion.created_at).toBeTruthy();
   });
 
-  it("stores the keyword when the judge sets the motion", async () => {
+  it("stores the keyword when the adjudicator sets the motion", async () => {
     const res = await request(app)
       .post(`/api/rooms/${chairedRoomId}/motion`)
       .set("Authorization", `Bearer ${chairToken}`)

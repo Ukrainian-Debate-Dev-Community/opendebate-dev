@@ -646,12 +646,12 @@ paths:
         "200": { $ref: "#/components/responses/Success" }
         "404": { $ref: "#/components/responses/NotFound" }
 
-  /events/{eventId}/stats/judges:
+  /events/{eventId}/stats/adjudicators:
     get:
       tags: [standings]
-      summary: Judge statistics (rooms judged, average feedback)
+      summary: Adjudicator statistics (rooms adjudicated, average feedback)
       description: >
-        Per adjudicator participant: `rooms_judged` (final rooms they are
+        Per adjudicator participant: `rooms_adjudicated` (final rooms they are
         assigned to) and `avg_feedback` (mean feedback score received in the
         event's final rooms, 2 d.p.; null without feedback).
       parameters:
