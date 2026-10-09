@@ -290,7 +290,9 @@ describe("Statistics API Endpoints", () => {
 
   describe("GET /api/events/:eventId/stats/speakers", () => {
     it("requires authentication", async () => {
-      const res = await request(app).get(`/api/events/${eventId}/stats/speakers`);
+      const res = await request(app).get(
+        `/api/events/${eventId}/stats/speakers`,
+      );
       expect(res.statusCode).toBe(401);
     });
 
@@ -396,10 +398,10 @@ describe("Statistics API Endpoints", () => {
     });
   });
 
-  describe("GET /api/events/:eventId/stats/judges", () => {
-    it("reports rooms judged in final rooms and average feedback", async () => {
+  describe("GET /api/events/:eventId/stats/adjudicators", () => {
+    it("reports rooms adjudicated in final rooms and average feedback", async () => {
       const res = await request(app)
-        .get(`/api/events/${eventId}/stats/judges`)
+        .get(`/api/events/${eventId}/stats/adjudicators`)
         .set("Authorization", `Bearer ${ownerToken}`);
 
       expect(res.statusCode).toBe(200);
@@ -409,24 +411,34 @@ describe("Statistics API Endpoints", () => {
       expect(byId[judgeIds.j1]).toEqual({
         id: judgeIds.j1,
         name: "Judge 1",
-        rooms_judged: 2,
+        rooms_adjudicated: 2,
         avg_feedback: 8.5,
       });
       expect(byId[judgeIds.j2]).toEqual({
         id: judgeIds.j2,
         name: "Judge 2",
-        rooms_judged: 0,
+        rooms_adjudicated: 0,
         avg_feedback: null,
       });
     });
 
     it("excludes hidden rounds for unprivileged viewers", async () => {
       const res = await request(app)
-        .get(`/api/events/${eventId}/stats/judges`)
+        .get(`/api/events/${eventId}/stats/adjudicators`)
         .set("Authorization", `Bearer ${randomToken}`);
 
       const j1 = res.body.data.find((j) => j.id === judgeIds.j1);
-      expect(j1).toMatchObject({ rooms_judged: 1 });
+      expect(j1).toMatchObject({ rooms_adjudicated: 1 });
+    });
+
+    it("still answers at the old /stats/judges address, with rooms_judged", async () => {
+      const res = await request(app)
+        .get(`/api/events/${eventId}/stats/judges`)
+        .set("Authorization", `Bearer ${ownerToken}`);
+
+      expect(res.statusCode).toBe(200);
+      const j1 = res.body.data.find((j) => j.id === judgeIds.j1);
+      expect(j1).toMatchObject({ rooms_adjudicated: 2, rooms_judged: 2 });
     });
   });
 
