@@ -78,8 +78,10 @@ const getUserStats = async (req, res, next) => {
         {
           model: RoomSpeaker,
           attributes: [],
+          // an iron-person's second speech is the team's, not theirs
           where: {
             participant_id: participantIds,
+            is_iron: false,
             ...exclusionClause,
           },
         },
@@ -100,6 +102,7 @@ const getUserStats = async (req, res, next) => {
       where: {
         participant_id: participantIds,
         rank: { [Op.not]: null },
+        is_iron: false,
         ...exclusionClause,
       },
       attributes: [
@@ -167,8 +170,8 @@ const requireEvent = async (eventId) => {
 
 // GET /api/events/:eventId/stats/speakers
 // Raw speaker-score statistics. `rounds` counts distinct rooms the speaker
-// was scored in; an iron-person's two speeches in one room both feed
-// total/avg/std while counting that room once.
+// was scored in; of an iron-person's two speeches in one room only the
+// one not marked iron feeds total/avg/std.
 const getSpeakerStats = async (req, res, next) => {
   try {
     const { eventId } = req.params;
@@ -193,7 +196,7 @@ const getSpeakerStats = async (req, res, next) => {
     });
 
     const roomSpeakers = await RoomSpeaker.findAll({
-      where: { room_team_id: roomTeams.map((rt) => rt.id) },
+      where: { room_team_id: roomTeams.map((rt) => rt.id), is_iron: false },
       attributes: ["id", "participant_id", "room_team_id"],
       include: [{ model: Score, attributes: ["value"] }],
     });

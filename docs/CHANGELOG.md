@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 ### Added
 
 - **Swagger UI:** Initialised OpenAPI documentation and interactive testing environment.
+- **Iron speeches:** a ballot can mark one of an iron-person's two speeches `is_iron` (by default the later one); it counts for the team but stays out of the speaker standings, speaker stats and user stats. Room reads carry the flag. A speaker score may name `participant_id`, the team member who actually gave the speech, so an absent teammate is not credited.
 
 ## [1.3.1] - 2026-05-11
 

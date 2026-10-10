@@ -8,6 +8,9 @@ module.exports = (sequelize) => {
       room_team_id: { type: DataTypes.INTEGER, allowNull: false },
       participant_id: { type: DataTypes.INTEGER, allowNull: false },
       rank: { type: DataTypes.SMALLINT, allowNull: true }, // team-position
+      // an iron-person's second speech: counts for the team, never for
+      // the speaker standings
+      is_iron: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
     },
     {
       tableName: "room_speakers",

@@ -99,7 +99,7 @@ const getSpeakerStandings = async (req, res, next) => {
     });
 
     const roomSpeakers = await RoomSpeaker.findAll({
-      where: { room_team_id: roomTeamIds },
+      where: { room_team_id: roomTeamIds, is_iron: false },
       attributes: ["participant_id", "room_team_id", "rank"],
     });
 
@@ -223,8 +223,9 @@ const getCalculatedSpeakerStandings = async (req, res, next) => {
 
     const roomTeamIds = roomTeams.map((rt) => rt.id);
 
+    // an iron-person's second speech counts for the team only
     const roomSpeakers = await RoomSpeaker.findAll({
-      where: { room_team_id: roomTeamIds },
+      where: { room_team_id: roomTeamIds, is_iron: false },
       attributes: ["id", "participant_id", "room_team_id", "rank"],
       include: [{ model: Score, attributes: ["value"] }],
     });

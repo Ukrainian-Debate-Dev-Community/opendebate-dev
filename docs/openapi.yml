@@ -1164,7 +1164,11 @@ paths:
         must cover every room speaker and respect the format's score bounds.
         On success the room status becomes `completed`. A `completed` room
         accepts resubmission as an atomic replace of the previous ballot;
-        `confirmed` and `void` rooms reject submission.
+        `confirmed` and `void` rooms reject submission. An iron-person (one
+        speaker in both of a team's slots) gives two speeches: both count
+        for the team, one of them (`is_iron`, by default the later slot)
+        stays out of the speaker standings and stats. Marking a speech that
+        is not an iron's, or both of an iron's, is a 400.
       parameters:
         - $ref: "#/components/parameters/roomId"
       requestBody:
@@ -1191,6 +1195,15 @@ paths:
                     properties:
                       room_speaker_id: { type: integer }
                       score: { type: number }
+                      is_iron:
+                        type: boolean
+                        description: This iron-person's speech counts for the team only.
+                      participant_id:
+                        type: integer
+                        description: >
+                          The team member who actually gave this speech, when it
+                          differs from the draw. A member giving both of the team's
+                          speeches is an iron-person; anyone outside the team is a 400.
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }

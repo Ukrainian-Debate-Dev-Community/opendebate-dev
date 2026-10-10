@@ -2,6 +2,8 @@ const {
   Room,
   RoomTeam,
   RoomSpeaker,
+  Team,
+  TeamMember,
   RoomAdjudicator,
   Format,
   Score,
@@ -18,7 +20,12 @@ const submitScores = async (req, res, next) => {
 
     /* Expected Payload Format:
       teamRankings: [ { room_team_id: 1, rank: 1 }, { room_team_id: 2, rank: 2 }, ... ]
-      speakerScores: [ { room_speaker_id: 1, score: 70 }, { room_speaker_id: 2, score: 71 }, ... ]
+      speakerScores: [ { room_speaker_id: 1, score: 70 }, { room_speaker_id: 2, score: 71, is_iron: true }, ... ]
+      is_iron is optional and only for one of an iron-person's two speeches;
+      unmarked, the later of the two is the iron speech.
+      participant_id is optional: the team member who actually gave that
+      speech when it differs from the draw (a teammate who did not show);
+      a member giving both speeches is an iron-person.
     */
 
     if (!Array.isArray(teamRankings) || teamRankings.length === 0) {
@@ -104,11 +111,16 @@ const submitScores = async (req, res, next) => {
 
     // Set to store all valid speaker IDs that belong to this room
     const validSpeakerIds = new Set();
+    // the room's speeches per team, to settle which iron speech is the
+    // one that stays out of the speaker standings
+    const teamSpeakers = [];
+    // who may give each slot's speech: the members of that slot's team
+    const membersBySpeaker = new Map();
 
     // update Team Rankings and force Speaker inheritance
     for (const teamData of teamRankings) {
       const roomTeam = await RoomTeam.findByPk(teamData.room_team_id, {
-        include: [RoomSpeaker],
+        include: [RoomSpeaker, { model: Team, include: [TeamMember], paranoid: false }],
         transaction,
       });
 
@@ -123,11 +135,15 @@ const submitScores = async (req, res, next) => {
       await roomTeam.save({ transaction });
 
       // apply the rank to the speakers and harvest their IDs for validation
+      const members = new Set(
+        ((roomTeam.Team && roomTeam.Team.TeamMembers) || []).map((m) => m.participant_id),
+      );
       for (const speaker of roomTeam.RoomSpeakers) {
         validSpeakerIds.add(speaker.id);
         speaker.rank = teamData.rank;
-        await speaker.save({ transaction });
+        membersBySpeaker.set(speaker.id, new Set([...members, speaker.participant_id]));
       }
+      teamSpeakers.push(roomTeam.RoomSpeakers);
     }
 
     // validate complete ballot
@@ -179,6 +195,60 @@ const submitScores = async (req, res, next) => {
         room_adjudicator_id: roomAdjudicatorId,
         value: score,
       });
+    }
+
+    // who actually spoke: a slot's speech may go to another member of
+    // the same team (the drawn speaker did not show up)
+    const speakersById = new Map(teamSpeakers.flat().map((s) => [s.id, s]));
+    for (const sp of speakerScores) {
+      if (sp.participant_id === undefined || sp.participant_id === null) continue;
+      const allowed = membersBySpeaker.get(sp.room_speaker_id);
+      if (!allowed || !allowed.has(sp.participant_id)) {
+        throw new AppError(
+          `Participant ${sp.participant_id} is not on the team of speaker ${sp.room_speaker_id}.`,
+          400,
+        );
+      }
+      speakersById.get(sp.room_speaker_id).participant_id = sp.participant_id;
+    }
+
+    // iron flags: within a team, a speech can be marked only when its
+    // speaker holds both slots, and only one of the two; with none
+    // marked, the later slot is the iron speech
+    const marked = new Set(
+      speakerScores.filter((sp) => sp.is_iron === true).map((sp) => sp.room_speaker_id),
+    );
+    for (const speakers of teamSpeakers) {
+      const byParticipant = new Map();
+      speakers.forEach((s) =>
+        byParticipant.set(s.participant_id, [...(byParticipant.get(s.participant_id) || []), s]),
+      );
+      for (const speaker of speakers) {
+        const twice = byParticipant.get(speaker.participant_id).length > 1;
+        if (marked.has(speaker.id) && !twice) {
+          throw new AppError(
+            `Speaker ${speaker.id} is not an iron-person's speech and cannot be marked iron.`,
+            400,
+          );
+        }
+      }
+      for (const pair of byParticipant.values()) {
+        if (pair.length < 2) {
+          pair.forEach((s) => {
+            s.is_iron = false;
+          });
+          continue;
+        }
+        const flagged = pair.filter((s) => marked.has(s.id));
+        if (flagged.length > 1) {
+          throw new AppError("Only one of an iron-person's speeches can be marked iron.", 400);
+        }
+        const iron = flagged[0] || pair.reduce((a, b) => (b.id > a.id ? b : a));
+        pair.forEach((s) => {
+          s.is_iron = s.id === iron.id;
+        });
+      }
+      for (const speaker of speakers) await speaker.save({ transaction });
     }
 
     await Score.bulkCreate(scoresToInsert, { transaction });
