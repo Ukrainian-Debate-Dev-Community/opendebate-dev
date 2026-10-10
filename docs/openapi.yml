@@ -1198,6 +1198,12 @@ paths:
                       is_iron:
                         type: boolean
                         description: This iron-person's speech counts for the team only.
+                      participant_id:
+                        type: integer
+                        description: >
+                          The team member who actually gave this speech, when it
+                          differs from the draw. A member giving both of the team's
+                          speeches is an iron-person; anyone outside the team is a 400.
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }

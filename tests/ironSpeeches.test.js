@@ -14,6 +14,7 @@ const {
   RoomTeam,
   RoomSpeaker,
   RoomAdjudicator,
+  TeamMember,
 } = require("../src/models");
 const jwt = require("jsonwebtoken");
 
@@ -24,6 +25,7 @@ describe("Iron speeches", () => {
   let eventId;
   let userId;
   let ironId;
+  let pairA, pairB;
   let roomId;
   let rtPair, rtIron;
   let pairSlots, ironSlots;
@@ -77,6 +79,8 @@ describe("Iron speeches", () => {
       { event_id: eventId, display_name: "Judge", role: "adjudicator" },
     ]);
     ironId = iron.id;
+    pairA = a.id;
+    pairB = b.id;
 
     const format = await Format.create({
       name: "Duo",
@@ -92,6 +96,11 @@ describe("Iron speeches", () => {
 
     const pairTeam = await Team.create({ event_id: eventId, name: "Pair" });
     const ironTeam = await Team.create({ event_id: eventId, name: "Iron" });
+    await TeamMember.bulkCreate([
+      { team_id: pairTeam.id, participant_id: a.id },
+      { team_id: pairTeam.id, participant_id: b.id },
+      { team_id: ironTeam.id, participant_id: iron.id },
+    ]);
     rtPair = await RoomTeam.create({ room_id: roomId, team_id: pairTeam.id, position: 1 });
     rtIron = await RoomTeam.create({ room_id: roomId, team_id: ironTeam.id, position: 2 });
 
@@ -167,5 +176,40 @@ describe("Iron speeches", () => {
 
     const both = await submit(() => ({ is_iron: true }));
     expect(both.statusCode).toEqual(400);
+  });
+
+  it("files a speech under the teammate who gave it; the absent one gets nothing", async () => {
+    const send = (pairExtra) =>
+      request(app)
+        .post(`/api/rooms/${roomId}/scores`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({
+          teamRankings: [
+            { room_team_id: rtIron.id, rank: 1 },
+            { room_team_id: rtPair.id, rank: 2 },
+          ],
+          speakerScores: [
+            { room_speaker_id: pairSlots[0].id, score: 70 },
+            { room_speaker_id: pairSlots[1].id, score: 69, ...pairExtra },
+            { room_speaker_id: ironSlots[0].id, score: 80 },
+            { room_speaker_id: ironSlots[1].id, score: 76 },
+          ],
+        });
+
+    // someone outside the team cannot be named
+    expect((await send({ participant_id: ironId })).statusCode).toEqual(400);
+
+    // Pair A gave both of the pair's speeches
+    const res = await send({ participant_id: pairA });
+    expect(res.statusCode).toEqual(200);
+
+    await Promise.all(pairSlots.map((s) => s.reload()));
+    expect(pairSlots.map((s) => s.participant_id)).toEqual([pairA, pairA]);
+    expect(pairSlots.map((s) => s.is_iron)).toEqual([false, true]);
+
+    const standings = await speakerStandings();
+    // rank 2 of 2: multiplier 1.0, one speech of 70 counted
+    expect(standings.find((s) => s.id === pairA).total_points).toEqual(70);
+    expect(standings.find((s) => s.id === pairB).total_points).toEqual(0);
   });
 });

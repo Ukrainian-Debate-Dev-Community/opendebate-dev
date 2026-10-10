@@ -2,6 +2,8 @@ const {
   Room,
   RoomTeam,
   RoomSpeaker,
+  Team,
+  TeamMember,
   RoomAdjudicator,
   Format,
   Score,
@@ -20,7 +22,10 @@ const submitScores = async (req, res, next) => {
       teamRankings: [ { room_team_id: 1, rank: 1 }, { room_team_id: 2, rank: 2 }, ... ]
       speakerScores: [ { room_speaker_id: 1, score: 70 }, { room_speaker_id: 2, score: 71, is_iron: true }, ... ]
       is_iron is optional and only for one of an iron-person's two speeches;
-      unmarked, the later of the two is the iron speech
+      unmarked, the later of the two is the iron speech.
+      participant_id is optional: the team member who actually gave that
+      speech when it differs from the draw (a teammate who did not show);
+      a member giving both speeches is an iron-person.
     */
 
     if (!Array.isArray(teamRankings) || teamRankings.length === 0) {
@@ -109,11 +114,13 @@ const submitScores = async (req, res, next) => {
     // the room's speeches per team, to settle which iron speech is the
     // one that stays out of the speaker standings
     const teamSpeakers = [];
+    // who may give each slot's speech: the members of that slot's team
+    const membersBySpeaker = new Map();
 
     // update Team Rankings and force Speaker inheritance
     for (const teamData of teamRankings) {
       const roomTeam = await RoomTeam.findByPk(teamData.room_team_id, {
-        include: [RoomSpeaker],
+        include: [RoomSpeaker, { model: Team, include: [TeamMember], paranoid: false }],
         transaction,
       });
 
@@ -128,9 +135,13 @@ const submitScores = async (req, res, next) => {
       await roomTeam.save({ transaction });
 
       // apply the rank to the speakers and harvest their IDs for validation
+      const members = new Set(
+        ((roomTeam.Team && roomTeam.Team.TeamMembers) || []).map((m) => m.participant_id),
+      );
       for (const speaker of roomTeam.RoomSpeakers) {
         validSpeakerIds.add(speaker.id);
         speaker.rank = teamData.rank;
+        membersBySpeaker.set(speaker.id, new Set([...members, speaker.participant_id]));
       }
       teamSpeakers.push(roomTeam.RoomSpeakers);
     }
@@ -184,6 +195,21 @@ const submitScores = async (req, res, next) => {
         room_adjudicator_id: roomAdjudicatorId,
         value: score,
       });
+    }
+
+    // who actually spoke: a slot's speech may go to another member of
+    // the same team (the drawn speaker did not show up)
+    const speakersById = new Map(teamSpeakers.flat().map((s) => [s.id, s]));
+    for (const sp of speakerScores) {
+      if (sp.participant_id === undefined || sp.participant_id === null) continue;
+      const allowed = membersBySpeaker.get(sp.room_speaker_id);
+      if (!allowed || !allowed.has(sp.participant_id)) {
+        throw new AppError(
+          `Participant ${sp.participant_id} is not on the team of speaker ${sp.room_speaker_id}.`,
+          400,
+        );
+      }
+      speakersById.get(sp.room_speaker_id).participant_id = sp.participant_id;
     }
 
     // iron flags: within a team, a speech can be marked only when its
