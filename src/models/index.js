@@ -35,6 +35,8 @@ const models = {
   RoomSpeaker: require("./RoomSpeaker")(sequelize),
   Score: require("./Score")(sequelize),
   Feedback: require("./Feedback")(sequelize),
+  FeedbackQuestion: require("./FeedbackQuestion")(sequelize),
+  FeedbackAnswer: require("./FeedbackAnswer")(sequelize),
   Conflict: require("./Conflict")(sequelize),
 };
 

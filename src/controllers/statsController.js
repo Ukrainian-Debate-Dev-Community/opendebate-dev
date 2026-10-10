@@ -6,6 +6,8 @@ const {
   Team,
   Score,
   Feedback,
+  FeedbackQuestion,
+  FeedbackAnswer,
   Round,
   Room,
   RoomTeam,
@@ -15,6 +17,7 @@ const {
 const { Op } = require("sequelize");
 const AppError = require("../utils/AppError");
 const { hasEventPrivilege } = require("../middleware/authMiddleware");
+const { feedbackScore } = require("../utils/feedbackForm");
 
 const getUserStats = async (req, res, next) => {
   try {
@@ -345,9 +348,31 @@ const getAdjudicatorStats = async (req, res, next) => {
       attributes: ["participant_id", "room_id"],
     });
 
+    // a base given as ?base=5 counts as one extra vote per adjudicator
+    let base = null;
+    if (req.query.base !== undefined) {
+      base = Number(req.query.base);
+      if (req.query.base === "" || !Number.isFinite(base)) {
+        throw new AppError("base must be a number.", 400);
+      }
+    }
+
+    // the event's form may score feedback from its answers
+    const countingIds = new Set(
+      (
+        await FeedbackQuestion.findAll({
+          where: { event_id: eventId, counts_in_score: true },
+          attributes: ["id"],
+          paranoid: false,
+        })
+      ).map((q) => q.id),
+    );
+
     const feedbacks = await Feedback.findAll({
       where: { room_id: roomIds, adjudicator_id: adjudicatorIds },
-      attributes: ["adjudicator_id", "score"],
+      attributes: ["id", "adjudicator_id", "score"],
+      include:
+        countingIds.size > 0 ? [{ model: FeedbackAnswer, as: "Answers" }] : [],
     });
 
     const stats = Object.create(null);
@@ -364,14 +389,16 @@ const getAdjudicatorStats = async (req, res, next) => {
       stats[ra.participant_id].rooms_adjudicated += 1;
     });
     feedbacks.forEach((fb) => {
-      stats[fb.adjudicator_id].feedback.push(Number(fb.score));
+      const value = feedbackScore(fb, countingIds);
+      if (value !== null) stats[fb.adjudicator_id].feedback.push(value);
     });
 
     const data = adjudicators.map((a) => {
       const { feedback, ...rest } = stats[a.id];
+      const votes = base === null ? feedback : [base, ...feedback];
       const avg_feedback =
-        feedback.length > 0
-          ? round2(feedback.reduce((sum, v) => sum + v, 0) / feedback.length)
+        votes.length > 0
+          ? round2(votes.reduce((sum, v) => sum + v, 0) / votes.length)
           : null;
       return { ...rest, avg_feedback };
     });

@@ -9,7 +9,8 @@ module.exports = (sequelize) => {
       adjudicator_id: { type: DataTypes.INTEGER, allowNull: false },
       issuer_participant_id: { type: DataTypes.INTEGER, allowNull: true },
       issuer_team_id: { type: DataTypes.INTEGER, allowNull: true },
-      score: { type: DataTypes.SMALLINT, allowNull: false },
+      // empty when the event's form scores feedback from its answers
+      score: { type: DataTypes.SMALLINT, allowNull: true },
       comment: { type: DataTypes.TEXT, allowNull: true },
     },
     {
@@ -49,6 +50,11 @@ module.exports = (sequelize) => {
     Feedback.belongsTo(models.Team, {
       as: "IssuerTeam",
       foreignKey: "issuer_team_id",
+    });
+    Feedback.hasMany(models.FeedbackAnswer, {
+      as: "Answers",
+      foreignKey: "feedback_id",
+      onDelete: "CASCADE",
     });
   };
 
