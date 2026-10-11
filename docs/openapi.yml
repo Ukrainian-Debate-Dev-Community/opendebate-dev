@@ -1295,7 +1295,9 @@ paths:
         Creates a released event motion and attaches it to the room in one
         transaction, while the room is `pending` or `judging`. Rooms carry
         their own motion_id, so rooms of one round can debate different
-        motions (club sessions).
+        motions (club sessions). An optional `prep_ends_at` sets when the
+        room's prep ends in the same transaction (null clears it; absent
+        leaves it unchanged); the response carries the room's value.
       parameters:
         - $ref: "#/components/parameters/roomId"
       requestBody:
@@ -1309,8 +1311,39 @@ paths:
                 motion_text: { type: string }
                 infoslide: { type: string, nullable: true }
                 keyword: { type: string, nullable: true, maxLength: 120 }
+                prep_ends_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+                  description: When prep ends and the debate starts.
       responses:
         "201": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /rooms/{roomId}/prep:
+    patch:
+      tags: [rooms]
+      summary: Move or clear when the room's prep ends (Chair; Owner/Organizer fall-through)
+      description: >
+        Sets `prep_ends_at` (a timestamp, or null for no prep clock) while
+        the room is `pending` or `judging`. Room reads
+        (`/rounds/{roundId}/rooms`) carry the value.
+      parameters:
+        - $ref: "#/components/parameters/roomId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prep_ends_at]
+              properties:
+                prep_ends_at: { type: string, format: date-time, nullable: true }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }

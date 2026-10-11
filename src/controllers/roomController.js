@@ -374,6 +374,34 @@ const createRoom = async (req, res, next) => {
 // adjudicator announces it to the room. Rooms are action-based, so this is
 // a dedicated action next to /scores and /confirm rather than a
 // generic room update.
+// optional prep end: absent leaves the room as it is, null clears it,
+// anything else must read as a date
+const parsePrepEndsAt = (body) => {
+  if (!Object.prototype.hasOwnProperty.call(body, "prep_ends_at")) {
+    return undefined;
+  }
+  const value = body.prep_ends_at;
+  if (value === null) return null;
+  const date = typeof value === "string" ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) {
+    throw new AppError(
+      "prep_ends_at must be an ISO 8601 timestamp or null.",
+      400,
+    );
+  }
+  return date;
+};
+
+const assertRoomOpen = (room, action) => {
+  if (room.status !== "pending" && room.status !== "judging") {
+    throw new AppError(
+      `Cannot ${action} of a room that is '${room.status}'. ` +
+        "Only rooms that are pending or judging can be changed.",
+      409,
+    );
+  }
+};
+
 const setRoomMotion = async (req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
@@ -381,6 +409,7 @@ const setRoomMotion = async (req, res, next) => {
     if (!motion_text) {
       throw new AppError("Please provide the motion_text.", 400);
     }
+    const prepEndsAt = parsePrepEndsAt(req.body);
 
     const room = await Room.findByPk(req.params.roomId, {
       include: [{ model: Round }],
@@ -409,12 +438,47 @@ const setRoomMotion = async (req, res, next) => {
     );
 
     room.motion_id = motion.id;
+    if (prepEndsAt !== undefined) room.prep_ends_at = prepEndsAt;
     await room.save({ transaction });
 
     await transaction.commit();
     res.status(201).json({
       status: "success",
-      data: { motion, room_id: room.id },
+      data: { motion, room_id: room.id, prep_ends_at: room.prep_ends_at },
+    });
+  } catch (error) {
+    await transaction.rollback();
+    next(error);
+  }
+};
+
+// chair action (owner/organiser fall-through): move or clear when the
+// room's prep ends, while the room is still open
+const setRoomPrep = async (req, res, next) => {
+  const transaction = await sequelize.transaction();
+  try {
+    const prepEndsAt = parsePrepEndsAt(req.body);
+    if (prepEndsAt === undefined) {
+      throw new AppError(
+        "Please provide prep_ends_at (a timestamp or null).",
+        400,
+      );
+    }
+
+    const room = await Room.findByPk(req.params.roomId, {
+      lock: transaction.LOCK.UPDATE,
+      transaction,
+    });
+    if (!room) throw new AppError("Room not found.", 404);
+    assertRoomOpen(room, "set the prep");
+
+    room.prep_ends_at = prepEndsAt;
+    await room.save({ transaction });
+
+    await transaction.commit();
+    res.status(200).json({
+      status: "success",
+      data: { room_id: room.id, prep_ends_at: room.prep_ends_at },
     });
   } catch (error) {
     await transaction.rollback();
@@ -574,6 +638,7 @@ module.exports = {
   createRoom,
   getRoundRooms,
   setRoomMotion,
+  setRoomPrep,
   deleteRoom,
   restoreRoom,
 };

@@ -8,6 +8,8 @@ module.exports = (sequelize) => {
       round_id: { type: DataTypes.INTEGER, allowNull: false },
       format_id: { type: DataTypes.INTEGER, allowNull: false },
       motion_id: { type: DataTypes.INTEGER, allowNull: true },
+      // when prep ends and the debate starts; null = no prep clock
+      prep_ends_at: { type: DataTypes.DATE, allowNull: true },
       status: {
         type: DataTypes.STRING(20),
         defaultValue: "pending",
