@@ -46,6 +46,10 @@ module.exports = (sequelize) => {
       foreignKey: "event_id",
       onDelete: "CASCADE",
     });
+    Event.hasMany(models.FeedbackQuestion, {
+      foreignKey: "event_id",
+      onDelete: "CASCADE",
+    });
     Event.belongsToMany(models.User, {
       through: models.Organizer,
       as: "Organizers",
