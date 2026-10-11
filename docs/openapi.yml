@@ -653,9 +653,18 @@ paths:
       description: >
         Per adjudicator participant: `rooms_adjudicated` (final rooms they are
         assigned to) and `avg_feedback` (mean feedback score received in the
-        event's final rooms, 2 d.p.; null without feedback).
+        event's final rooms, 2 d.p.; null without feedback). A feedback's
+        score is the average of its answers to the event's counting questions
+        when it has any, otherwise its stored score. With `base`, the base
+        counts as one extra vote: (base + sum) / (count + 1), and an
+        adjudicator without feedback gets the base.
       parameters:
         - $ref: "#/components/parameters/eventId"
+        - name: base
+          in: query
+          required: false
+          description: A number counted as one extra vote in each average.
+          schema: { type: number, example: 5 }
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "404": { $ref: "#/components/responses/NotFound" }
@@ -1024,10 +1033,79 @@ paths:
         "409": { $ref: "#/components/responses/Conflict" }
 
   # ─── event feedback listing ───
+  /events/{eventId}/feedback-questions:
+    get:
+      tags: [feedback]
+      summary: The event's feedback form (any signed-in user)
+      description: Questions in `position` order, then by id.
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    post:
+      tags: [feedback]
+      summary: Add a question to the event's feedback form (Owner/Organizer)
+      description: >
+        `min_value`/`max_value` apply to integer questions, `choices` to
+        choice questions; only integer questions can `count_in_score`. The
+        key is unique within the event (409 when taken). When an event has
+        counting questions, its feedback is scored from the answers.
+      parameters:
+        - $ref: "#/components/parameters/eventId"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FeedbackQuestionInput" }
+            example:
+              key: accuracy
+              label: How accurate was the adjudicator's call?
+              type: integer
+              min_value: 1
+              max_value: 10
+              required: true
+              counts_in_score: true
+              position: 1
+      responses:
+        "201": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /events/{eventId}/feedback-questions/{questionId}:
+    parameters:
+      - $ref: "#/components/parameters/eventId"
+      - { name: questionId, in: path, required: true, schema: { type: integer } }
+    patch:
+      tags: [feedback]
+      summary: Change a question (Owner/Organizer; 409 once it has answers)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/FeedbackQuestionInput" }
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      tags: [feedback]
+      summary: Remove a question (Owner/Organizer; 409 once it has answers)
+      responses:
+        "200": { $ref: "#/components/responses/Success" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
   /events/{eventId}/feedback:
     get:
       tags: [feedback]
       summary: List an event's adjudicator feedback (Owner/Organizer)
+      description: >
+        Each feedback carries `answers` ([{ key, label, value }]) and its
+        `score`, computed from the counting answers when the event's form
+        has any.
       parameters:
         - $ref: "#/components/parameters/eventId"
         - $ref: "#/components/parameters/listPage"
@@ -1265,7 +1343,14 @@ paths:
     post:
       tags: [feedback]
       summary: Submit feedback about a room adjudicator
-      description: Exactly one of issuer_participant_id / issuer_team_id must be set.
+      description: >
+        Exactly one of issuer_participant_id / issuer_team_id must be set.
+        `answers` answer the event's feedback questions by key; every required
+        question must be answered and each value must fit its question. When
+        the event has counting questions, `score` is not accepted and the
+        feedback's score is the average of the counting answers; otherwise
+        `score` is required as before. The response carries `answers` and the
+        computed `score`.
       parameters:
         - $ref: "#/components/parameters/roomId"
       requestBody:
@@ -1274,13 +1359,31 @@ paths:
           application/json:
             schema:
               type: object
-              required: [adjudicator_id, score]
+              required: [adjudicator_id]
               properties:
                 adjudicator_id: { type: integer }
                 issuer_participant_id: { type: integer, nullable: true }
                 issuer_team_id: { type: integer, nullable: true }
-                score: { type: integer }
+                score:
+                  type: integer
+                  description: Required unless the event's form scores feedback.
                 comment: { type: string, nullable: true }
+                answers:
+                  type: array
+                  items:
+                    type: object
+                    required: [key, value]
+                    properties:
+                      key: { type: string }
+                      value:
+                        description: integer, string, boolean or one of the choices
+            example:
+              adjudicator_id: 12
+              issuer_team_id: 40
+              comment: The call was right; the closings needed more comparison.
+              answers:
+                - { key: accuracy, value: 7 }
+                - { key: reasoning, value: 8 }
       responses:
         "201": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }
@@ -1463,6 +1566,19 @@ components:
           schema: { $ref: "#/components/schemas/Error" }
 
   schemas:
+    FeedbackQuestionInput:
+      type: object
+      required: [key, label, type]
+      properties:
+        key: { type: string, pattern: "^[a-z][a-z0-9_]{0,49}$" }
+        label: { type: string }
+        type: { type: string, enum: [integer, text, boolean, choice] }
+        min_value: { type: integer, nullable: true }
+        max_value: { type: integer, nullable: true }
+        choices: { type: array, items: { type: string }, nullable: true }
+        required: { type: boolean, default: false }
+        counts_in_score: { type: boolean, default: false }
+        position: { type: integer, default: 0 }
     Envelope:
       type: object
       properties:

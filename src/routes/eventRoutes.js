@@ -17,6 +17,7 @@ const motionRoutes = require("./motionRoutes");
 const participantRoutes = require("./eventParticipantRoutes");
 const organizerRoutes = require("./organizerRoutes");
 const conflictRoutes = require("./conflictRoutes");
+const feedbackQuestionRoutes = require("./feedbackQuestionRoutes");
 
 // public listing — registered before verifyToken so it stays unauthenticated
 router.get("/", eventController.listPublicEvents);
@@ -28,6 +29,7 @@ router.use("/:eventId/motions", motionRoutes);
 router.use("/:eventId/participants", participantRoutes);
 router.use("/:eventId/organizers", organizerRoutes);
 router.use("/:eventId/conflicts", conflictRoutes);
+router.use("/:eventId/feedback-questions", feedbackQuestionRoutes);
 
 router.get("/:eventId/access", eventController.checkEventAccess);
 

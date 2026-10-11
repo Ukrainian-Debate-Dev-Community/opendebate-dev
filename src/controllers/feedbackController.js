@@ -8,9 +8,16 @@ const {
   EventParticipant,
   Team,
   TeamMember,
+  FeedbackQuestion,
+  FeedbackAnswer,
   sequelize,
 } = require("../models");
 const AppError = require("../utils/AppError");
+const {
+  cleanAnswers,
+  answerValue,
+  feedbackScore,
+} = require("../utils/feedbackForm");
 const { paginate } = require("../utils/pagination");
 const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
 const { hasEventPrivilege } = require("../middleware/authMiddleware");
@@ -25,9 +32,10 @@ const submitFeedback = async (req, res, next) => {
       issuer_team_id,
       score,
       comment,
+      answers,
     } = req.body;
 
-    if (!adjudicator_id || score === undefined) {
+    if (!adjudicator_id) {
       throw new AppError("Adjudicator ID and score are required.", 400);
     }
 
@@ -43,6 +51,28 @@ const submitFeedback = async (req, res, next) => {
 
     const room = await Room.findByPk(roomId, { transaction });
     if (!room) throw new AppError("Room not found.", 404);
+
+    // the event's form: with counting questions the score comes from
+    // the answers, otherwise the client sends it as before
+    const round = await Round.findByPk(room.round_id, {
+      paranoid: false,
+      transaction,
+    });
+    const questions = await FeedbackQuestion.findAll({
+      where: { event_id: round.event_id },
+      transaction,
+    });
+    const scoredByForm = questions.some((q) => q.counts_in_score);
+    if (scoredByForm && score !== undefined && score !== null) {
+      throw new AppError(
+        "This event scores feedback from its questions; send answers, not a score.",
+        400,
+      );
+    }
+    if (!scoredByForm && (score === undefined || score === null)) {
+      throw new AppError("Adjudicator ID and score are required.", 400);
+    }
+    const answerRows = cleanAnswers(questions, answers);
     if (room.status !== "completed" && room.status !== "confirmed") {
       throw new AppError(
         "Cannot submit feedback. The room is not yet completed.",
@@ -148,18 +178,55 @@ const submitFeedback = async (req, res, next) => {
         adjudicator_id,
         issuer_participant_id: issuer_participant_id || null,
         issuer_team_id: issuer_team_id || null,
-        score,
+        score: scoredByForm ? null : score,
         comment: comment || null,
       },
       { transaction },
     );
 
+    const savedAnswers = await FeedbackAnswer.bulkCreate(
+      answerRows.map((row) => ({ ...row, feedback_id: newFeedback.id })),
+      { transaction },
+    );
+
     await transaction.commit();
-    res.status(201).json({ status: "success", data: newFeedback });
+
+    newFeedback.Answers = savedAnswers;
+    res.status(201).json({
+      status: "success",
+      data: withForm(newFeedback, questions),
+    });
   } catch (error) {
     await transaction.rollback();
     next(error);
   }
+};
+
+// a feedback as clients read it: its answers by question key and its
+// score (computed from the answers when the event's form counts them)
+const withForm = (feedback, questions) => {
+  const byId = new Map(questions.map((q) => [q.id, q]));
+  const counting = new Set(
+    questions.filter((q) => q.counts_in_score).map((q) => q.id),
+  );
+  const answers = (feedback.Answers || []).filter((a) =>
+    byId.has(a.question_id),
+  );
+  const plain = feedback.toJSON();
+  delete plain.Answers;
+
+  return {
+    ...plain,
+    score: feedbackScore(feedback, counting),
+    answers: answers.map((a) => {
+      const question = byId.get(a.question_id);
+      return {
+        key: question.key,
+        label: question.label,
+        value: answerValue(a, question),
+      };
+    }),
+  };
 };
 
 const getEventFeedback = async (req, res, next) => {
@@ -198,12 +265,21 @@ const getEventFeedback = async (req, res, next) => {
           attributes: ["id", "display_name"],
         },
         { model: Team, as: "IssuerTeam", attributes: ["id", "name"] },
+        { model: FeedbackAnswer, as: "Answers" },
       ],
       order: [["id", "DESC"]],
       ...paginate(req.query),
     });
 
-    res.status(200).json({ status: "success", data: feedbackRecords });
+    const questions = await FeedbackQuestion.findAll({
+      where: { event_id: eventId },
+      paranoid: false,
+    });
+
+    res.status(200).json({
+      status: "success",
+      data: feedbackRecords.map((fb) => withForm(fb, questions)),
+    });
   } catch (error) {
     next(error);
   }
