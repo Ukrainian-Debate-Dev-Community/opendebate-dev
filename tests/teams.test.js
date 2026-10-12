@@ -25,6 +25,7 @@ describe("Team API Endpoints", () => {
   let activeRoomId;
 
   let p1, p2, p3, p4, p5;
+  let adjId;
   let team1Id;
   let formatId;
 
@@ -121,6 +122,11 @@ describe("Team API Endpoints", () => {
         display_name: "Eve",
         role: "speaker",
       },
+      {
+        event_id: eventId,
+        display_name: "Judge Judy",
+        role: "adjudicator",
+      },
     ]);
 
     p1 = participants[0].id;
@@ -128,6 +134,7 @@ describe("Team API Endpoints", () => {
     p3 = participants[2].id;
     p4 = participants[3].id;
     p5 = participants[4].id;
+    adjId = participants[5].id;
   });
 
   afterAll(async () => {
@@ -170,6 +177,16 @@ describe("Team API Endpoints", () => {
       expect(res.body.message).toMatch(
         /One or more participants are invalid or do not belong to this event/i,
       );
+    });
+
+    it("should return 400 if a participant is an adjudicator", async () => {
+      const res = await request(app)
+        .post(`/api/events/${eventId}/teams`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ name: "Judged Team", participant_ids: [p5, adjId] });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.message).toMatch(/Only speakers can be members/i);
     });
 
     it("should return 404 if the event does not exist", async () => {
@@ -375,6 +392,16 @@ describe("Team API Endpoints", () => {
       roomToLock.status = "pending";
       await roomToLock.save();
       await RoomTeam.destroy({ where: { room_id: activeRoomId } });
+    });
+
+    it("should return 400 if the new roster includes an adjudicator", async () => {
+      const res = await request(app)
+        .put(`/api/events/${eventId}/teams/${team1Id}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ participant_ids: [p3, adjId] });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.message).toMatch(/Only speakers can be members/i);
     });
 
     it("should update members successfully", async () => {
