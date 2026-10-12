@@ -280,6 +280,16 @@ describe("Organisation API Endpoints", () => {
       );
     });
 
+    it("should return 404 if a non-admin updates a non-existent organisation", async () => {
+      const res = await request(app)
+        .put("/api/organisations/99999")
+        .set("Authorization", `Bearer ${randomToken}`)
+        .send({ name: "Ghost Org" });
+
+      expect(res.statusCode).toEqual(404);
+      expect(res.body.message).toMatch(/Organisation not found/i);
+    });
+
     // the admin bypasses the 403 check above and may try to update a non-existent Org
     it("should return 404 if attempting to update a non-existent organisation", async () => {
       const res = await request(app)

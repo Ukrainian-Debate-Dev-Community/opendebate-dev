@@ -187,6 +187,13 @@ const removeOwner = async (req, res, next) => {
       transaction,
     });
 
+    if (!owners.some((o) => String(o.user_id) === String(ownerIdToRemove))) {
+      throw new AppError(
+        "This user is not an owner of this Organisation.",
+        404,
+      );
+    }
+
     if (owners.length <= 1) {
       throw new AppError(
         "Cannot remove the last owner. Assign a new owner first or delete the Organisation.",

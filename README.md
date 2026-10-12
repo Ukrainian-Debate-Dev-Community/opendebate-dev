@@ -23,8 +23,8 @@ RESTful API built with Node.js and Express to manage debate clubs, tournaments, 
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/Ukrainian-Debate-Dev-Community/opendebate-dev.git
-   cd opendebate-dev
+   git clone https://github.com/Ukrainian-Debate-Dev-Community/opendebate-engine.git
+   cd opendebate-engine
    ```
 
 2. **Install dependencies:**

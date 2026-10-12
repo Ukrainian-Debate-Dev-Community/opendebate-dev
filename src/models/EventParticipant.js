@@ -28,6 +28,14 @@ module.exports = (sequelize) => {
     },
   );
 
+  // the guest claim hash never leaves the engine, whichever endpoint
+  // serialises the participant
+  EventParticipant.prototype.toJSON = function () {
+    const values = { ...this.get({ plain: true }) };
+    delete values.claim_token_hash;
+    return values;
+  };
+
   EventParticipant.associate = (models) => {
     EventParticipant.belongsTo(models.Event, { foreignKey: "event_id" });
     EventParticipant.belongsTo(models.User, { foreignKey: "user_id" });

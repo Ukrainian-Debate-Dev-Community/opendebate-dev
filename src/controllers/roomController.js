@@ -14,6 +14,7 @@ const {
 } = require("../models");
 const AppError = require("../utils/AppError");
 const { destroyOrArchive } = require("../utils/lifecycle");
+const { checkMotionKeyword } = require("../utils/motionKeyword");
 
 const createRoom = async (req, res, next) => {
   const transaction = await sequelize.transaction();
@@ -360,6 +361,7 @@ const createRoom = async (req, res, next) => {
     res.status(201).json({
       status: "success",
       message: "Room created successfully based on format rules.",
+      data: room,
     });
   } catch (error) {
     await transaction.rollback();
@@ -409,6 +411,7 @@ const setRoomMotion = async (req, res, next) => {
     if (!motion_text) {
       throw new AppError("Please provide the motion_text.", 400);
     }
+    checkMotionKeyword(keyword);
     const prepEndsAt = parsePrepEndsAt(req.body);
 
     const room = await Room.findByPk(req.params.roomId, {
