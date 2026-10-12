@@ -189,6 +189,16 @@ describe("Per-room motions (the adjudicator sets the motion of their room)", () 
     expect(withMotion.Motion.created_at).toBeTruthy();
   });
 
+  it("rejects a keyword longer than 32 characters", async () => {
+    const res = await request(app)
+      .post(`/api/rooms/${chairedRoomId}/motion`)
+      .set("Authorization", `Bearer ${chairToken}`)
+      .send({ motion_text: "THW tag motions", keyword: "k".repeat(33) });
+
+    expect(res.statusCode).toBe(400);
+    expect(res.body.message).toMatch(/at most 32 characters/i);
+  });
+
   it("stores the keyword when the adjudicator sets the motion", async () => {
     const res = await request(app)
       .post(`/api/rooms/${chairedRoomId}/motion`)

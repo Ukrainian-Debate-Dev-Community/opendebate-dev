@@ -58,6 +58,10 @@ const createTeam = async (req, res, next) => {
       );
     }
 
+    if (validParticipants.some((p) => p.role !== "speaker")) {
+      throw new AppError("Only speakers can be members of a team.", 400);
+    }
+
     // PERMANENT TEAMS: enforce one-team-per-event rule
     // TEMPORARY TEAMS: bypass this so speakers can form new pairs in subsequent rounds
     if (!is_temporary) {
@@ -263,6 +267,10 @@ const updateTeam = async (req, res, next) => {
           "One or more participants are invalid or do not belong to this event.",
           400,
         );
+      }
+
+      if (validParticipants.some((p) => p.role !== "speaker")) {
+        throw new AppError("Only speakers can be members of a team.", 400);
       }
 
       // PERMANENT TEAMS: check for duplicates when updating a roster
