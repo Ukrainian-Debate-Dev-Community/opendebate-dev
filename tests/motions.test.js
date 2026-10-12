@@ -122,6 +122,26 @@ describe("Motion API Endpoints", () => {
       expect(res.body.message).toMatch(/Please provide the motion_text/i);
     });
 
+    it("should return 400 if the keyword is longer than 32 characters", async () => {
+      const res = await request(app)
+        .post(`/api/events/${eventId}/motions`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ motion_text: "THW tag motions.", keyword: "k".repeat(33) });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.message).toMatch(/at most 32 characters/i);
+    });
+
+    it("should accept a keyword of exactly 32 characters", async () => {
+      const res = await request(app)
+        .post(`/api/events/${eventId}/motions`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ motion_text: "THW tag motions.", keyword: "k".repeat(32) });
+
+      expect(res.statusCode).toEqual(201);
+      expect(res.body.data.keyword).toBe("k".repeat(32));
+    });
+
     it("should return 404 if the event is soft-deleted", async () => {
       const deletedEvent = await Event.create({
         organisation_id: orgId,
@@ -196,13 +216,13 @@ describe("Motion API Endpoints", () => {
       expect(unreleased.keyword).toBe("space");
     });
 
-    it("should return 404 if no motions exist for the event", async () => {
+    it("should return an empty list if no motions exist for the event", async () => {
       const res = await request(app)
         .get(`/api/events/${emptyEventId}/motions`)
         .set("Authorization", `Bearer ${randomToken}`);
 
-      expect(res.statusCode).toEqual(404);
-      expect(res.body.message).toMatch(/No motions found/i);
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.data).toEqual([]);
     });
 
     it("should return 404 for a non-existent event", async () => {
@@ -211,7 +231,15 @@ describe("Motion API Endpoints", () => {
         .set("Authorization", `Bearer ${randomToken}`);
 
       expect(res.statusCode).toEqual(404);
-      expect(res.body.message).toMatch(/No motions found/i);
+      expect(res.body.message).toMatch(/Event not found/i);
+    });
+
+    it("should return 400 for a non-numeric event id", async () => {
+      const res = await request(app)
+        .get(`/api/events/abc/motions`)
+        .set("Authorization", `Bearer ${randomToken}`);
+
+      expect(res.statusCode).toEqual(400);
     });
   });
 
@@ -287,6 +315,16 @@ describe("Motion API Endpoints", () => {
       expect(res.body.data.keyword).toBe("astropolitics");
       // untouched fields stay intact
       expect(res.body.data.motion_text).toBe("THW invade Mars.");
+    });
+
+    it("should return 400 if the new keyword is longer than 32 characters", async () => {
+      const res = await request(app)
+        .put(`/api/events/${eventId}/motions/${unreleasedMotionId}`)
+        .set("Authorization", `Bearer ${ownerToken}`)
+        .send({ keyword: "k".repeat(33) });
+
+      expect(res.statusCode).toEqual(400);
+      expect(res.body.message).toMatch(/at most 32 characters/i);
     });
 
     it("should return 404 if updating a non-existent motion", async () => {

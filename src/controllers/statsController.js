@@ -1,4 +1,5 @@
 const {
+  User,
   RoomSpeaker,
   EventParticipant,
   Event,
@@ -22,6 +23,9 @@ const { feedbackScore } = require("../utils/feedbackForm");
 const getUserStats = async (req, res, next) => {
   try {
     const targetUserId = req.params.id;
+
+    const user = await User.findByPk(targetUserId);
+    if (!user) throw new AppError("User not found.", 404);
 
     // gather all Participant IDs linked to user
     const participants = await EventParticipant.findAll({
@@ -129,7 +133,7 @@ const getUserStats = async (req, res, next) => {
 
     const winRate =
       totalRankedRooms > 0
-        ? ((firstPlaces / totalRankedRooms) * 100).toFixed(1)
+        ? parseFloat(((firstPlaces / totalRankedRooms) * 100).toFixed(1))
         : 0;
 
     // compilation
@@ -137,7 +141,7 @@ const getUserStats = async (req, res, next) => {
       overview: {
         total_ballots_received: parseInt(core.total_ballots) || 0,
         total_debates_ranked: totalRankedRooms,
-        average_speaker_score: parseFloat(core.avg_score || 0).toFixed(2),
+        average_speaker_score: round2(parseFloat(core.avg_score || 0)),
         highest_score: core.highest_score || 0,
         lowest_score: core.lowest_score || 0,
       },

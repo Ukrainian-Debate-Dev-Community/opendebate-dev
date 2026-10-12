@@ -444,6 +444,9 @@ describe("Room API Endpoints", () => {
         order: [["id", "DESC"]],
       });
       roomId = rooms[0].id;
+      // the created room comes back, so callers need not re-list the round
+      expect(res.body.data.id).toBe(roomId);
+      expect(res.body.data.status).toBe("pending");
     });
 
     it("should return 409 if a speaker (and therefore team) is double-booked across different rooms", async () => {

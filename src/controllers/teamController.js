@@ -58,6 +58,10 @@ const createTeam = async (req, res, next) => {
       );
     }
 
+    if (validParticipants.some((p) => p.role !== "speaker")) {
+      throw new AppError("Only speakers can be members of a team.", 400);
+    }
+
     // PERMANENT TEAMS: enforce one-team-per-event rule
     // TEMPORARY TEAMS: bypass this so speakers can form new pairs in subsequent rounds
     if (!is_temporary) {
@@ -265,6 +269,10 @@ const updateTeam = async (req, res, next) => {
         );
       }
 
+      if (validParticipants.some((p) => p.role !== "speaker")) {
+        throw new AppError("Only speakers can be members of a team.", 400);
+      }
+
       // PERMANENT TEAMS: check for duplicates when updating a roster
       if (!isTemporary) {
         const existingMemberships = await TeamMember.findAll({
@@ -338,9 +346,15 @@ const updateTeam = async (req, res, next) => {
 
     await team.save({ transaction });
     await transaction.commit();
+
+    // same shape as create; the roster itself is read via GET /teams
+    const data = team.toJSON();
+    delete data.TeamMembers;
+
     res.status(200).json({
       status: "success",
       message: "Team roster updated successfully.",
+      data,
     });
   } catch (error) {
     await transaction.rollback();
