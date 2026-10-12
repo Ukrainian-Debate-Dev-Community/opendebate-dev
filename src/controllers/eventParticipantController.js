@@ -81,10 +81,7 @@ const addParticipant = async (req, res, next) => {
     const responseData = participant.toJSON();
 
     // only return the raw token once during creation
-    if (claimToken) {
-      responseData.raw_claim_token = claimToken;
-      delete responseData.claim_token_hash; // hide the hash
-    }
+    if (claimToken) responseData.raw_claim_token = claimToken;
 
     res.status(201).json({ status: "success", data: responseData });
   } catch (error) {
