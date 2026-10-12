@@ -345,6 +345,8 @@ describe("Team API Endpoints", () => {
 
       expect(res.statusCode).toEqual(200);
       expect(res.body.message).toMatch(/Team roster updated successfully/i);
+      expect(res.body.data.id).toBe(team1Id);
+      expect(res.body.data.name).toBe("Updated Team A");
 
       const dbCheck = await Team.findByPk(team1Id);
       expect(dbCheck.name).toBe("Updated Team A");

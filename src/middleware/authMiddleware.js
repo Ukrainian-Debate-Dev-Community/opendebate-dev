@@ -7,6 +7,7 @@ const {
   Team,
   Motion,
   Owner,
+  Organisation,
   Organizer,
   RoomAdjudicator,
   EventParticipant,
@@ -153,6 +154,11 @@ const restrictToOwnOrg = async (req, res, next) => {
       });
 
       if (isOwner) return next();
+
+      const organisation = await Organisation.findByPk(
+        req.params.organisationId,
+      );
+      if (!organisation) throw new AppError("Organisation not found.", 404);
 
       throw new AppError(
         "Only an Owner of this organisation can perform this action.",

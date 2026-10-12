@@ -338,9 +338,15 @@ const updateTeam = async (req, res, next) => {
 
     await team.save({ transaction });
     await transaction.commit();
+
+    // same shape as create; the roster itself is read via GET /teams
+    const data = team.toJSON();
+    delete data.TeamMembers;
+
     res.status(200).json({
       status: "success",
       message: "Team roster updated successfully.",
+      data,
     });
   } catch (error) {
     await transaction.rollback();

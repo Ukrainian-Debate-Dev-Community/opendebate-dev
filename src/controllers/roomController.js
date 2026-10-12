@@ -360,6 +360,7 @@ const createRoom = async (req, res, next) => {
     res.status(201).json({
       status: "success",
       message: "Room created successfully based on format rules.",
+      data: room,
     });
   } catch (error) {
     await transaction.rollback();

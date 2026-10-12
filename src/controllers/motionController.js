@@ -36,15 +36,15 @@ const createMotion = async (req, res, next) => {
 const getMotions = async (req, res, next) => {
   try {
     const eventId = req.params.eventId;
+
+    const event = await Event.findByPk(eventId, { paranoid: false });
+    if (!event) throw new AppError("Event not found.", 404);
+
     const motions = await Motion.findAll({
       where: { event_id: eventId },
       order: [["id", "ASC"]],
       ...paginate(req.query),
     });
-
-    if (!motions || motions.length === 0) {
-      throw new AppError("No motions found for this event.", 404);
-    }
 
     // reuse shared privilege check instead of re-implementing owner/organiser
     // climbing here. Admin/owner/organiser see unreleased motions in full.

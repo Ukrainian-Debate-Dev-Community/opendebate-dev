@@ -205,6 +205,27 @@ describe("Owner API Endpoints", () => {
       );
     });
 
+    it("should return 404 for a non-owner even when one owner is left", async () => {
+      const remainingOwners = await Owner.findAll({
+        where: { organisation_id: orgId },
+      });
+
+      for (let owner of remainingOwners) {
+        if (owner.user_id !== initialOwnerId) {
+          await Owner.destroy({ where: { user_id: owner.user_id } });
+        }
+      }
+
+      const res = await request(app)
+        .delete(`/api/organisations/${orgId}/owners/${targetUserId}`)
+        .set("Authorization", `Bearer ${adminToken}`);
+
+      expect(res.statusCode).toEqual(404);
+      expect(res.body.message).toMatch(
+        /This user is not an owner of this Organisation/i,
+      );
+    });
+
     it("should prevent an Admin from removing the last remaining owner", async () => {
       // force deletion of all owners except the initial one
       const remainingOwners = await Owner.findAll({
