@@ -3,6 +3,7 @@ const AppError = require("../utils/AppError");
 const { paginate } = require("../utils/pagination");
 const { hasEventPrivilege } = require("../middleware/authMiddleware");
 const { destroyOrArchive, restoreRecord } = require("../utils/lifecycle");
+const { checkMotionKeyword } = require("../utils/motionKeyword");
 
 const createMotion = async (req, res, next) => {
   try {
@@ -11,6 +12,7 @@ const createMotion = async (req, res, next) => {
 
     if (!motion_text)
       throw new AppError("Please provide the motion_text.", 400);
+    checkMotionKeyword(keyword);
 
     // verify the event exists (and isn't soft-deleted) before insert,
     // so we return a clean 404 instead of a DB FK violation.
@@ -110,6 +112,7 @@ const updateMotion = async (req, res, next) => {
   try {
     const { motionId } = req.params;
     const { motion_text, infoslide, keyword, is_released } = req.body;
+    checkMotionKeyword(keyword);
 
     const motion = await Motion.findOne({
       where: { id: motionId, event_id: req.params.eventId },
