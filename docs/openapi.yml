@@ -10,6 +10,13 @@ info:
     (`archived_at` timestamp); permanent deletion requires `?hard=true` and an
     Admin. Archived records are hidden from default queries, listable via
     `?include_archived=true`, and recoverable via `PATCH .../restore`.
+
+    Every operation except register, login and the public event listing
+    needs a bearer token: a missing, invalid or expired token, or one whose
+    user no longer exists, is a 401. A path id that is not an integer (or
+    any value Postgres cannot read as its column type) is a 400. Errors
+    carry `{status, message}`; model validation failures (400) and unique
+    violations (409) add `details`, one message per failed field.
   version: 2.0.0
 servers:
   - url: /api
@@ -77,6 +84,7 @@ paths:
                 newPassword: { type: string }
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
   /users/username:
@@ -94,15 +102,25 @@ paths:
                 username: { type: string }
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /users:
     delete:
       tags: [users]
-      summary: Delete own account (anonymised when historical records exist)
+      summary: Delete own account; event history stays, detached from it
+      description: >
+        Deletes the user row (204, no body). Every event participant row of
+        the user survives with `user_id` set to null and its display name
+        scrubbed to `deleted_user_<uuid>`, so rooms, scores and standings
+        keep their history. Every foreign key to users cascades or sets
+        null, so the anonymise-instead fallback (200 with a message) only
+        happens if a future reference blocks the delete.
       responses:
-        "200": { $ref: "#/components/responses/Success" }
-        "204": { description: Account permanently deleted }
+        "200": { $ref: "#/components/responses/Message" }
+        "204": { description: Account deleted; participations kept as guests }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /users/history:
     get:
@@ -113,6 +131,7 @@ paths:
         - $ref: "#/components/parameters/limit"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /users/schedule:
     get:
@@ -123,15 +142,30 @@ paths:
         - $ref: "#/components/parameters/limit"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /users/{id}/stats:
     get:
       tags: [users]
       summary: Aggregated speaker statistics for a user (visible rounds only)
+      description: >
+        `data` is null (with a message) for an existing user who never
+        spoke in an event; an unknown user is a 404.
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
-        "200": { $ref: "#/components/responses/Success" }
+        "200":
+          description: The user's speaker statistics, or null
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  message: { type: string }
+                  data: { $ref: "#/components/schemas/UserStats" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /users/claim-participant/{participantId}:
@@ -151,17 +185,23 @@ paths:
                 claim_token: { type: string }
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   # ────────────────────────── admins ──────────────────────────
   /admins/grant:
     post:
       tags: [admins]
       summary: Grant platform Admin to a user (Admin only)
+      description: 400 when targetUserId is missing or the user is already an Admin.
       requestBody:
         $ref: "#/components/requestBodies/TargetUser"
       responses:
-        "201": { $ref: "#/components/responses/Success" }
+        "200": { $ref: "#/components/responses/Message" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -178,6 +218,51 @@ paths:
         $ref: "#/components/requestBodies/TargetUser"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
+
+  /admins/merge:
+    post:
+      tags: [admins]
+      summary: Move one user's participations to another account (Admin only)
+      description: >
+        Moves every event participant row of the source user (archived ones
+        too) to the target in one transaction, optionally renaming them to
+        `displayName`, then anonymises the source like `/admins/anonymise`.
+        400 for missing ids, the same id twice or an empty displayName; 404
+        when either user is unknown or deleted; 409 when the source is an
+        Admin, Owner or Organizer, or both users are registered in the same
+        event.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [sourceUserId, targetUserId]
+              properties:
+                sourceUserId: { type: integer }
+                targetUserId: { type: integer }
+                displayName: { type: string }
+      responses:
+        "200":
+          description: Number of participant rows moved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  message: { type: string }
+                  data:
+                    type: object
+                    properties:
+                      moved: { type: integer }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -194,9 +279,11 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/Success"
+        "401": { $ref: "#/components/responses/Unauthorized" }
     post:
       tags: [organisations]
       summary: Create an organisation with an initial owner (Admin only)
+      description: Names are not unique; 404 when owner_id is not a user.
       requestBody:
         required: true
         content:
@@ -212,7 +299,10 @@ paths:
                 owner_id: { type: integer }
       responses:
         "201": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /organisations/{organisationId}:
     parameters:
@@ -222,10 +312,12 @@ paths:
       summary: Get one organisation with its owners
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
     put:
       tags: [organisations]
       summary: Update an organisation (Owner)
+      description: 404 for an unknown organisation, 403 for a non-owner.
       requestBody:
         required: true
         content:
@@ -240,6 +332,9 @@ paths:
                 status: { type: string }
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
       tags: [organisations]
@@ -248,7 +343,9 @@ paths:
         - $ref: "#/components/parameters/hard"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /organisations/{organisationId}/stats:
@@ -264,6 +361,7 @@ paths:
         - $ref: "#/components/parameters/organisationId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /organisations/{organisationId}/restore:
@@ -274,6 +372,9 @@ paths:
         - $ref: "#/components/parameters/organisationId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /organisations/{organisationId}/owners:
@@ -287,17 +388,30 @@ paths:
       responses:
         "201": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /organisations/{organisationId}/owners/{ownerId}:
     delete:
       tags: [organisations]
-      summary: Remove an owner — the last owner cannot be removed (Admin)
+      summary: Remove an owner - the last owner cannot be removed (Admin)
+      description: >
+        404 when the user is not an owner of the organisation; 400 when
+        they are its last owner.
       parameters:
         - $ref: "#/components/parameters/organisationId"
-        - { name: ownerId, in: path, required: true, schema: { type: integer } }
+        - name: ownerId
+          in: path
+          required: true
+          description: The owner's USER id (not an Owner row id)
+          schema: { type: integer }
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   # ────────────────────────── formats ──────────────────────────
   /formats:
@@ -306,6 +420,7 @@ paths:
       summary: List formats
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
     post:
       tags: [formats]
       summary: Create a format (Admin)
@@ -316,7 +431,10 @@ paths:
             schema: { $ref: "#/components/schemas/FormatInput" }
       responses:
         "201": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /formats/{formatId}:
     parameters:
@@ -326,6 +444,7 @@ paths:
       summary: Get one format
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
     put:
       tags: [formats]
@@ -337,6 +456,10 @@ paths:
             schema: { $ref: "#/components/schemas/FormatInput" }
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
     delete:
       tags: [formats]
       summary: Archive a format (Admin; ?hard=true to purge, blocked while rooms use it)
@@ -344,6 +467,9 @@ paths:
         - $ref: "#/components/parameters/hard"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /formats/{formatId}/restore:
@@ -354,6 +480,9 @@ paths:
         - $ref: "#/components/parameters/formatId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   # ────────────────────────── events ──────────────────────────
@@ -393,6 +522,7 @@ paths:
         - $ref: "#/components/parameters/listLimit"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
 
   /events/{eventId}:
     parameters:
@@ -403,7 +533,9 @@ paths:
       description: >
         API quirk: for this POST the path parameter is the ORGANISATION id,
         not an event id — the route is `POST /events/:organisationId` sharing
-        the URL shape of the event-detail routes.
+        the URL shape of the event-detail routes. Dates are read as ISO
+        dates or timestamps and returned as date-time (`2026-10-20T00:00:00.000Z`).
+        404 for an unknown organisation.
       requestBody:
         required: true
         content:
@@ -417,14 +549,36 @@ paths:
                 end_date: { type: string, format: date, nullable: true }
                 is_ranked: { type: boolean }
       responses:
-        "201": { $ref: "#/components/responses/Success" }
+        "201":
+          description: The created event
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  message: { type: string }
+                  data: { $ref: "#/components/schemas/Event" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
     get:
       tags: [events]
       summary: Get one event (added in PR #60)
       responses:
-        "200": { $ref: "#/components/responses/Success" }
+        "200":
+          description: The event
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  message: { type: string }
+                  data: { $ref: "#/components/schemas/Event" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
     put:
       tags: [events]
@@ -445,6 +599,9 @@ paths:
                 is_ranked: { type: boolean }
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
     delete:
       tags: [events]
@@ -453,7 +610,9 @@ paths:
         - $ref: "#/components/parameters/hard"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /events/{eventId}/restore:
@@ -464,6 +623,9 @@ paths:
         - $ref: "#/components/parameters/eventId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /events/{eventId}/access:
@@ -485,6 +647,8 @@ paths:
                     type: object
                     properties:
                       isPrivileged: { type: boolean }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /events/{eventId}/eliminations:
     patch:
@@ -512,6 +676,8 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /events/{eventId}/check-ins:
     patch:
@@ -536,6 +702,8 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   # ─── rounds (event-scoped) ───
   /events/{eventId}/rounds:
@@ -549,6 +717,7 @@ paths:
         - $ref: "#/components/parameters/listLimit"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
     post:
       tags: [rounds]
       summary: Create a round (Owner/Organizer)
@@ -565,6 +734,9 @@ paths:
                 is_hidden: { type: boolean }
       responses:
         "201": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /events/{eventId}/rounds/release-all:
@@ -575,6 +747,8 @@ paths:
         - $ref: "#/components/parameters/eventId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   # ─── standings (event-scoped) ───
   /events/{eventId}/standings/teams:
@@ -585,6 +759,8 @@ paths:
         - $ref: "#/components/parameters/eventId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /events/{eventId}/standings/speakers:
     get:
@@ -594,6 +770,8 @@ paths:
         - $ref: "#/components/parameters/eventId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /events/{eventId}/standings/calculated/teams:
     get:
@@ -603,6 +781,8 @@ paths:
         - $ref: "#/components/parameters/eventId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /events/{eventId}/standings/calculated/speakers:
     get:
@@ -612,6 +792,8 @@ paths:
         - $ref: "#/components/parameters/eventId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   # ─── statistics (event-scoped) ───
   # Computed over rooms with a final ballot only ('completed', plus
@@ -631,6 +813,7 @@ paths:
         - $ref: "#/components/parameters/eventId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /events/{eventId}/stats/teams:
@@ -644,6 +827,7 @@ paths:
         - $ref: "#/components/parameters/eventId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /events/{eventId}/stats/adjudicators:
@@ -667,6 +851,7 @@ paths:
           schema: { type: number, example: 5 }
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   # ─── teams (event-scoped) ───
@@ -681,9 +866,11 @@ paths:
         - $ref: "#/components/parameters/listLimit"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
     post:
       tags: [teams]
       summary: Create a team (Owner/Organizer)
+      description: Every participant must be a speaker of the event (400 otherwise).
       requestBody:
         required: true
         content:
@@ -703,7 +890,20 @@ paths:
                   default: false
                   description: Swing teams fill empty slots and are excluded from team standings
       responses:
-        "201": { $ref: "#/components/responses/Success" }
+        "201":
+          description: The created team (members are read via GET /teams)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  message: { type: string }
+                  data: { $ref: "#/components/schemas/Team" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409":
           description: Participant already in a permanent team, or name taken
           content:
@@ -736,6 +936,7 @@ paths:
                   data:
                     type: object
                     properties:
+                      total_free_speakers: { type: integer }
                       proposed_teams:
                         type: array
                         items:
@@ -745,6 +946,18 @@ paths:
                             participant_ids:
                               type: array
                               items: { type: integer }
+                            participants:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  id: { type: integer }
+                                  display_name: { type: string }
+                                  checked_in: { type: boolean }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /events/{eventId}/teams/{teamId}:
     parameters:
@@ -753,15 +966,50 @@ paths:
     put:
       tags: [teams]
       summary: Update a team (Owner/Organizer)
+      description: >
+        A new roster replaces the members (speakers of the event only) and
+        is refused (400) while the team sits in a judging, completed or
+        confirmed room; 409 when the name is taken or a member already
+        belongs to another permanent team.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: { type: string }
+                participant_ids:
+                  type: array
+                  items: { type: integer }
+                is_swing: { type: boolean }
       responses:
-        "200": { $ref: "#/components/responses/Success" }
+        "200":
+          description: The updated team (members are read via GET /teams)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  message: { type: string }
+                  data: { $ref: "#/components/schemas/Team" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
     delete:
       tags: [teams]
       summary: Archive a team — blocked while assigned to a room (Owner/Organizer; ?hard=true Admin)
+      description: An unknown or already archived team is a 404.
       parameters:
         - $ref: "#/components/parameters/hard"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /events/{eventId}/teams/{teamId}/restore:
@@ -773,6 +1021,8 @@ paths:
         - $ref: "#/components/parameters/teamId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   # ─── participants (event-scoped) ───
@@ -787,6 +1037,7 @@ paths:
         - $ref: "#/components/parameters/listLimit"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
     post:
       tags: [participants]
       summary: Register a participant (platform user or guest)
@@ -805,8 +1056,23 @@ paths:
                 display_name: { type: string }
                 role: { type: string, enum: [speaker, adjudicator] }
       responses:
-        "201": { $ref: "#/components/responses/Success" }
+        "201":
+          description: >
+            The participant; a guest's response also carries
+            `raw_claim_token`, shown only this once.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  message: { type: string }
+                  data: { $ref: "#/components/schemas/Participant" }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /events/{eventId}/participants/{participantId}:
     parameters:
@@ -825,14 +1091,33 @@ paths:
                 display_name: { type: string }
                 role: { type: string, enum: [speaker, adjudicator] }
       responses:
-        "200": { $ref: "#/components/responses/Success" }
+        "200":
+          description: The updated participant
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  message: { type: string }
+                  data: { $ref: "#/components/schemas/Participant" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
     delete:
       tags: [participants]
       summary: Archive a participant — blocked while assigned as room adjudicator (Owner/Organizer; ?hard=true Admin)
+      description: >
+        409 while the participant is on a team or a room adjudicator; an
+        unknown or already archived participant is a 404.
       parameters:
         - $ref: "#/components/parameters/hard"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /events/{eventId}/participants/{participantId}/check-in:
@@ -854,6 +1139,7 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
@@ -866,6 +1152,8 @@ paths:
         - $ref: "#/components/parameters/participantId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   # ─── organizers (event-scoped) ───
@@ -877,14 +1165,32 @@ paths:
       summary: List event organizers
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
     post:
       tags: [organizers]
       summary: Delegate event management to a user (Owner)
+      description: >
+        Every organizer has the same rights. A `role` field in the body is
+        accepted and ignored: the engine keeps no organizer roles.
       requestBody:
-        $ref: "#/components/requestBodies/TargetUser"
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [targetUserId]
+              properties:
+                targetUserId: { type: integer }
+                role:
+                  type: string
+                  description: Ignored; not stored.
       responses:
         "201": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /events/{eventId}/organizers/{targetUserId}:
     delete:
@@ -898,6 +1204,8 @@ paths:
           schema: { type: integer }
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   # ─── conflicts (event-scoped) ───
@@ -912,6 +1220,8 @@ paths:
         - $ref: "#/components/parameters/listLimit"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
     post:
       tags: [conflicts]
       summary: Record a conflict — exactly one of target_participant_id / target_team_id (Owner/Organizer)
@@ -930,6 +1240,10 @@ paths:
       responses:
         "201": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /events/{eventId}/conflicts/{conflictId}:
     delete:
@@ -941,7 +1255,10 @@ paths:
         - $ref: "#/components/parameters/hard"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /events/{eventId}/conflicts/{conflictId}/restore:
     patch:
@@ -952,6 +1269,8 @@ paths:
         - $ref: "#/components/parameters/conflictId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   # ─── motions (event-scoped) ───
@@ -961,15 +1280,34 @@ paths:
     get:
       tags: [motions]
       summary: List motions — unreleased motion text is masked for unprivileged users
+      description: >
+        An event without motions gives an empty list; an unknown event is a
+        404. Unprivileged users get each unreleased motion as a MaskedMotion.
       parameters:
         - $ref: "#/components/parameters/listPage"
         - $ref: "#/components/parameters/listLimit"
       responses:
-        "200": { $ref: "#/components/responses/Success" }
+        "200":
+          description: The event's motions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  message: { type: string }
+                  data:
+                    type: array
+                    items:
+                      oneOf:
+                        - $ref: "#/components/schemas/Motion"
+                        - $ref: "#/components/schemas/MaskedMotion"
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
     post:
       tags: [motions]
       summary: Create a motion (Owner/Organizer)
+      description: A keyword over 32 characters is a 400.
       requestBody:
         required: true
         content:
@@ -980,10 +1318,13 @@ paths:
               properties:
                 motion_text: { type: string }
                 infoslide: { type: string, nullable: true }
-                keyword: { type: string, nullable: true, maxLength: 120 }
+                keyword: { type: string, nullable: true, maxLength: 32 }
                 is_released: { type: boolean, default: false }
       responses:
         "201": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
   /events/{eventId}/motions/{motionId}:
@@ -995,7 +1336,9 @@ paths:
       summary: Get one motion — 403 while unreleased for unprivileged users
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
     put:
       tags: [motions]
       summary: Update a motion (Owner/Organizer)
@@ -1008,10 +1351,14 @@ paths:
               properties:
                 motion_text: { type: string }
                 infoslide: { type: string, nullable: true }
-                keyword: { type: string, nullable: true, maxLength: 120 }
+                keyword: { type: string, nullable: true, maxLength: 32 }
                 is_released: { type: boolean }
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
     delete:
       tags: [motions]
       summary: Archive a motion — rooms keep their historical reference (Owner/Organizer; ?hard=true Admin)
@@ -1019,6 +1366,8 @@ paths:
         - $ref: "#/components/parameters/hard"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /events/{eventId}/motions/{motionId}/restore:
@@ -1030,6 +1379,8 @@ paths:
         - $ref: "#/components/parameters/motionId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   # ─── event feedback listing ───
@@ -1042,6 +1393,7 @@ paths:
         - $ref: "#/components/parameters/eventId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
     post:
       tags: [feedback]
@@ -1070,7 +1422,9 @@ paths:
       responses:
         "201": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /events/{eventId}/feedback-questions/{questionId}:
@@ -1088,6 +1442,8 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
     delete:
@@ -1095,6 +1451,8 @@ paths:
       summary: Remove a question (Owner/Organizer; 409 once it has answers)
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
@@ -1112,6 +1470,9 @@ paths:
         - $ref: "#/components/parameters/listLimit"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   # ────────────────────────── rounds ──────────────────────────
   /rounds/{roundId}:
@@ -1122,6 +1483,7 @@ paths:
       summary: Get one round
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "404": { $ref: "#/components/responses/NotFound" }
     put:
       tags: [rounds]
@@ -1141,6 +1503,10 @@ paths:
                 is_hidden: { type: boolean }
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
     delete:
       tags: [rounds]
@@ -1149,7 +1515,10 @@ paths:
         - $ref: "#/components/parameters/hard"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /rounds/{roundId}/restore:
     patch:
@@ -1159,6 +1528,8 @@ paths:
         - $ref: "#/components/parameters/roundId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /rounds/{roundId}/rooms:
@@ -1167,8 +1538,10 @@ paths:
     get:
       tags: [rooms]
       summary: List a round's rooms with teams, speakers, and adjudicators
+      description: An unknown round gives an empty list.
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
     post:
       tags: [rooms]
       summary: Create a room from permanent and/or temporary teams (Owner/Organizer)
@@ -1207,8 +1580,20 @@ paths:
                         type: string
                         enum: [chair, panelist, trainee]
       responses:
-        "201": { $ref: "#/components/responses/Success" }
+        "201":
+          description: The created room
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string }
+                  message: { type: string }
+                  data: { $ref: "#/components/schemas/Room" }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   # ────────────────────────── rooms ──────────────────────────
@@ -1221,6 +1606,9 @@ paths:
         - $ref: "#/components/parameters/hard"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /rooms/{roomId}/restore:
@@ -1231,6 +1619,9 @@ paths:
         - $ref: "#/components/parameters/roomId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /rooms/{roomId}/scores:
@@ -1246,7 +1637,8 @@ paths:
         speaker in both of a team's slots) gives two speeches: both count
         for the team, one of them (`is_iron`, by default the later slot)
         stays out of the speaker standings and stats. Marking a speech that
-        is not an iron's, or both of an iron's, is a 400.
+        is not an iron's, or both of an iron's, is a 400. The response
+        carries a message only.
       parameters:
         - $ref: "#/components/parameters/roomId"
       requestBody:
@@ -1283,8 +1675,11 @@ paths:
                           differs from the draw. A member giving both of the team's
                           speeches is an iron-person; anyone outside the team is a 400.
       responses:
-        "200": { $ref: "#/components/responses/Success" }
+        "200": { $ref: "#/components/responses/Message" }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /rooms/{roomId}/motion:
@@ -1297,7 +1692,9 @@ paths:
         their own motion_id, so rooms of one round can debate different
         motions (club sessions). An optional `prep_ends_at` sets when the
         room's prep ends in the same transaction (null clears it; absent
-        leaves it unchanged); the response carries the room's value.
+        leaves it unchanged); the response carries the room's value. Each
+        call creates a new event motion; the room's previous one stays in
+        the event. A keyword over 32 characters is a 400.
       parameters:
         - $ref: "#/components/parameters/roomId"
       requestBody:
@@ -1310,7 +1707,7 @@ paths:
               properties:
                 motion_text: { type: string }
                 infoslide: { type: string, nullable: true }
-                keyword: { type: string, nullable: true, maxLength: 120 }
+                keyword: { type: string, nullable: true, maxLength: 32 }
                 prep_ends_at:
                   type: string
                   format: date-time
@@ -1319,6 +1716,7 @@ paths:
       responses:
         "201": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -1345,6 +1743,7 @@ paths:
       responses:
         "200": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
@@ -1360,6 +1759,9 @@ paths:
         - $ref: "#/components/parameters/roomId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /rooms/{roomId}/unconfirm:
@@ -1370,6 +1772,9 @@ paths:
         - $ref: "#/components/parameters/roomId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
   /rooms/{roomId}/feedback:
@@ -1420,6 +1825,10 @@ paths:
       responses:
         "201": { $ref: "#/components/responses/Success" }
         "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   # ────────────────────────── feedback moderation ──────────────────────────
   /feedback/{feedbackId}:
@@ -1431,16 +1840,26 @@ paths:
         - $ref: "#/components/parameters/hard"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+        "409": { $ref: "#/components/responses/Conflict" }
 
   /feedback/{feedbackId}/restore:
     patch:
       tags: [feedback]
       summary: Restore an archived feedback record (Admin)
+      description: >
+        Returns the stored row: `score` is as stored (null when the event's
+        form scores feedback from its answers) and there are no `answers`;
+        the event feedback listing shows the computed score and answers.
       parameters:
         - $ref: "#/components/parameters/feedbackId"
       responses:
         "200": { $ref: "#/components/responses/Success" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
         "409": { $ref: "#/components/responses/Conflict" }
 
 components:
@@ -1597,6 +2016,15 @@ components:
       content:
         application/json:
           schema: { $ref: "#/components/schemas/Error" }
+    Message:
+      description: Success with a message and no data
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              status: { type: string, enum: [success] }
+              message: { type: string }
 
   schemas:
     FeedbackQuestionInput:
@@ -1624,6 +2052,105 @@ components:
       properties:
         status: { type: string, enum: [fail, error] }
         message: { type: string }
+        details:
+          type: array
+          items: { type: string }
+          description: >
+            Present on model validation errors (400) and unique violations
+            (409): one message per failed field.
+    Event:
+      allOf:
+        - type: object
+          properties:
+            id: { type: integer }
+            organisation_id: { type: integer }
+            name: { type: string }
+            start_date: { type: string, format: date-time, nullable: true }
+            end_date: { type: string, format: date-time, nullable: true }
+            status: { type: string, enum: [scheduled, in_progress, completed] }
+            is_ranked: { type: boolean }
+        - $ref: "#/components/schemas/Archivable"
+    Participant:
+      allOf:
+        - type: object
+          description: The guest claim token hash is never returned.
+          properties:
+            id: { type: integer }
+            event_id: { type: integer }
+            user_id: { type: integer, nullable: true }
+            display_name: { type: string }
+            role: { type: string, enum: [speaker, adjudicator] }
+            is_eliminated: { type: boolean }
+            checked_in: { type: boolean }
+            claim_token_used_at: { type: string, format: date-time, nullable: true }
+            raw_claim_token:
+              type: string
+              description: Only in the response that creates a guest
+        - $ref: "#/components/schemas/Archivable"
+    Team:
+      allOf:
+        - type: object
+          properties:
+            id: { type: integer }
+            event_id: { type: integer }
+            name: { type: string }
+            is_temporary: { type: boolean }
+            is_eliminated: { type: boolean }
+            is_swing: { type: boolean }
+        - $ref: "#/components/schemas/Archivable"
+    Room:
+      allOf:
+        - type: object
+          properties:
+            id: { type: integer }
+            round_id: { type: integer }
+            format_id: { type: integer }
+            motion_id: { type: integer, nullable: true }
+            prep_ends_at: { type: string, format: date-time, nullable: true }
+            status:
+              type: string
+              enum: [pending, live, judging, completed, confirmed, void]
+        - $ref: "#/components/schemas/Archivable"
+    Motion:
+      allOf:
+        - type: object
+          properties:
+            id: { type: integer }
+            event_id: { type: integer }
+            motion_text: { type: string }
+            infoslide: { type: string, nullable: true }
+            keyword: { type: string, nullable: true, maxLength: 32 }
+            is_released: { type: boolean }
+        - $ref: "#/components/schemas/Archivable"
+    MaskedMotion:
+      type: object
+      description: >
+        An unreleased motion as unprivileged users see it: placeholder
+        text, null infoslide and keyword, and no timestamps.
+      properties:
+        id: { type: integer }
+        event_id: { type: integer }
+        motion_text: { type: string, example: Motion will be revealed later. }
+        infoslide: { type: string, nullable: true }
+        keyword: { type: string, nullable: true }
+        is_released: { type: boolean, enum: [false] }
+    UserStats:
+      type: object
+      nullable: true
+      properties:
+        overview:
+          type: object
+          properties:
+            total_ballots_received: { type: integer }
+            total_debates_ranked: { type: integer }
+            average_speaker_score: { type: number, example: 77.4 }
+            highest_score: { type: number }
+            lowest_score: { type: number }
+        placements:
+          type: object
+          properties:
+            first_places: { type: integer }
+            win_rate_percentage: { type: number, example: 27.3 }
     Archivable:
       type: object
       description: Mixin present on all archivable entities
