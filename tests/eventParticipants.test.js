@@ -165,6 +165,7 @@ describe("Event Participant API Endpoints", () => {
       expect(res.body.data.display_name).toBe("Guest Speaker");
       expect(res.body.data.user_id).toBeNull();
       expect(res.body.data.raw_claim_token).toBeDefined();
+      expect(res.body.data).not.toHaveProperty("claim_token_hash");
 
       guestParticipantId = res.body.data.id; // save for subsequent tests
     });
@@ -183,6 +184,7 @@ describe("Event Participant API Endpoints", () => {
       expect(res.body.status).toBe("success");
       expect(res.body.data.user_id).toBe(joiningUserId);
       expect(res.body.data.raw_claim_token).toBeUndefined(); // linked users don't get tokens
+      expect(res.body.data).not.toHaveProperty("claim_token_hash");
 
       linkedParticipantId = res.body.data.id;
     });
@@ -285,6 +287,7 @@ describe("Event Participant API Endpoints", () => {
       expect(res.statusCode).toEqual(200);
       expect(res.body.status).toBe("success");
       expect(res.body.data.role).toBe("adjudicator");
+      expect(res.body.data).not.toHaveProperty("claim_token_hash");
     });
 
     it("should return 404 for updating a non-existent participant", async () => {
