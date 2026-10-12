@@ -22,6 +22,7 @@ describe("Scoring and Stats API Endpoints", () => {
   let chairToken;
   let panelistToken;
   let randomToken;
+  let randomUserId;
 
   let targetUserId;
   let chairUserId;
@@ -79,6 +80,7 @@ describe("Scoring and Stats API Endpoints", () => {
       username: "random_user",
       password: "hashedpassword123",
     });
+    randomUserId = randomUser.id;
     randomToken = jwt.sign(
       { id: randomUser.id, isAdmin: false },
       process.env.JWT_SECRET || "testsecret",
@@ -566,9 +568,26 @@ describe("Scoring and Stats API Endpoints", () => {
 
   // GET part (Stat check)
   describe("GET /api/users/:id/stats", () => {
-    it("should return a null data object with a message for a user with no debates", async () => {
+    it("should return 404 for an unknown user", async () => {
       const res = await request(app)
         .get(`/api/users/99999/stats`)
+        .set("Authorization", `Bearer ${randomToken}`);
+
+      expect(res.statusCode).toEqual(404);
+      expect(res.body.message).toMatch(/User not found/i);
+    });
+
+    it("should return 400 for a non-numeric user id", async () => {
+      const res = await request(app)
+        .get(`/api/users/abc/stats`)
+        .set("Authorization", `Bearer ${randomToken}`);
+
+      expect(res.statusCode).toEqual(400);
+    });
+
+    it("should return a null data object with a message for a user with no debates", async () => {
+      const res = await request(app)
+        .get(`/api/users/${randomUserId}/stats`)
         .set("Authorization", `Bearer ${randomToken}`);
 
       expect(res.statusCode).toEqual(200);
@@ -593,13 +612,13 @@ describe("Scoring and Stats API Endpoints", () => {
       expect(stats.overview.total_debates_ranked).toBe(1);
 
       // shouldn't count the 85 from the hidden round
-      expect(stats.overview.average_speaker_score).toBe("80.00");
+      expect(stats.overview.average_speaker_score).toBe(80);
       expect(stats.overview.highest_score).toBe(80);
       expect(stats.overview.lowest_score).toBe(80);
 
       // should only show 1 win, not 2
       expect(stats.placements.first_places).toBe(1);
-      expect(stats.placements.win_rate_percentage).toBe("100.0");
+      expect(stats.placements.win_rate_percentage).toBe(100);
     });
   });
 });

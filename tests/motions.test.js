@@ -216,13 +216,13 @@ describe("Motion API Endpoints", () => {
       expect(unreleased.keyword).toBe("space");
     });
 
-    it("should return 404 if no motions exist for the event", async () => {
+    it("should return an empty list if no motions exist for the event", async () => {
       const res = await request(app)
         .get(`/api/events/${emptyEventId}/motions`)
         .set("Authorization", `Bearer ${randomToken}`);
 
-      expect(res.statusCode).toEqual(404);
-      expect(res.body.message).toMatch(/No motions found/i);
+      expect(res.statusCode).toEqual(200);
+      expect(res.body.data).toEqual([]);
     });
 
     it("should return 404 for a non-existent event", async () => {
@@ -231,7 +231,15 @@ describe("Motion API Endpoints", () => {
         .set("Authorization", `Bearer ${randomToken}`);
 
       expect(res.statusCode).toEqual(404);
-      expect(res.body.message).toMatch(/No motions found/i);
+      expect(res.body.message).toMatch(/Event not found/i);
+    });
+
+    it("should return 400 for a non-numeric event id", async () => {
+      const res = await request(app)
+        .get(`/api/events/abc/motions`)
+        .set("Authorization", `Bearer ${randomToken}`);
+
+      expect(res.statusCode).toEqual(400);
     });
   });
 

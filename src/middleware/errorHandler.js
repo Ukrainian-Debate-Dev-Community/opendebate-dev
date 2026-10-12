@@ -30,6 +30,18 @@ const errorHandler = (err, req, res, _next) => {
     });
   }
 
+  // Postgres could not read a value as its column type (a path id like
+  // "abc", an integer out of range): the client sent it, so it is a 400
+  if (
+    err.name === "SequelizeDatabaseError" &&
+    ["22P02", "22003"].includes(err.original && err.original.code)
+  ) {
+    return res.status(400).json({
+      status: "fail",
+      message: "Invalid input: a value has the wrong type or is out of range.",
+    });
+  }
+
   if (err.name === "SequelizeForeignKeyConstraintError") {
     return res.status(400).json({
       status: "fail",
