@@ -73,3 +73,7 @@ A full Postman collection containing all available endpoints, request bodies, an
 - `/api/sessions` - Management of time-blocks (Evenings Meeting or Tournament Rounds).
 - `/api/sessions/:sessionId/*` - Nested routers handling domain-specific logic for `teams`, `waitlists`, `rooms`, and `motion`.
 - `/api/admins/grant` - Simple route to grant Administrator status to another user.
+
+## License
+
+Released under the [MIT License](LICENSE).
